@@ -128,7 +128,7 @@ class DiscordClient(discord.Client):
 
         self.guild = guild
         self.channel = channel
-        print("Bot \"{}\" connected to Discord on guild \"{}\"".format(self.user, guild.name))
+        print("Bot \"{}\" connected to Discord on guild \"{}\", posting to channel \"{}\"".format(self.user, guild.name, channel.name))
 
     async def my_background_task(self):
         await self.wait_until_ready()
