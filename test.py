@@ -108,13 +108,23 @@ class DiscordClient(discord.Client):
         self.guild = None
 
     async def on_ready(self):
+        found_guild = False
         for guild in self.guilds:
             if guild.name == DISCORD_GUILD:
+                found_guild = True
                 break
 
+        if not found_guild:
+            raise Exception("Guild not found: \"{}\"".format(DISCORD_GUILD))
+
+        found_channel = False
         for channel in guild.text_channels:
             if channel.name == DISCORD_CHANNEL:
+                found_channel = True
                 break
+
+        if not found_channel:
+            raise Exception("Channel not found: \"{}\" in guild \"{}\"".format(DISCORD_CHANNEL, guild.name))
 
         self.guild = guild
         self.channel = channel
