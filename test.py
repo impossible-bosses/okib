@@ -4,7 +4,12 @@ import os
 import requests
 import traceback
 
-from secret import DISCORD_GUILD, DISCORD_TOKEN
+from secret import DISCORD_TOKEN
+
+DISCORD_GUILD = "IB CAFETERIA"
+DISCORD_CHANNEL = "lobbies-test"
+
+open_lobbies = set()
 
 class Lobby:
     def __init__(self, lobby_dict):
@@ -17,6 +22,35 @@ class Lobby:
         self.slots_total = lobby_dict["slotsTotal"]
         self.created = lobby_dict["created"]
         self.last_updated = lobby_dict["lastUpdated"]
+        self.message_id = None
+
+    def __eq__(self, other):
+        return self.id == other.id
+
+    def __hash__(self):
+        return self.id
+
+    def to_discord_embed(self, open = True):
+        COLOR_OPEN = discord.Colour.from_rgb(0, 255, 0)
+        COLOR_CLOSED = discord.Colour.from_rgb(255, 0, 0)
+
+        if self.map[-4:] != ".w3x":
+            raise Exception("Bad map file: {}".format(self.map))
+        if self.slots_total != 9:
+            raise Exception("Expected 9 total players, not {}".format(self.slots_total))
+
+        map_trimmed = self.map[:-4]
+        embed = discord.Embed(title=map_trimmed, color=(COLOR_OPEN if open else COLOR_CLOSED))
+        embed.add_field(name="Lobby Name", value=self.name, inline=False)
+        embed.add_field(name="Host", value=self.host, inline=True)
+        embed.add_field(name="Region", value=self.server, inline=True)
+        players_str = "{} / {}".format(self.slots_taken - 1, self.slots_total - 1)
+        embed.add_field(name="Players", value=players_str, inline=True)
+
+        return embed
+
+def is_ib_lobby(lobby):
+    return lobby.map.find("Impossible") != -1 and lobby.map.find("Bosses") != -1
 
 def get_ib_lobbies():
     response = requests.get("https://api.wc3stats.com/gamelist")
@@ -25,12 +59,44 @@ def get_ib_lobbies():
         raise Exception("Property 'games' in HTTP response is not a list, {}".format(type(games)))
 
     lobbies = [Lobby(game) for game in games]
-    ib_lobbies = []
-    for lobby in lobbies:
-        if lobby.map.find("Impossible") != -1 and lobby.map.find("Bosses") != -1:
-            ib_lobbies.append(lobby)
+    return set([lobby for lobby in lobbies if is_ib_lobby(lobby)])
 
-    return ib_lobbies
+async def report_ib_lobbies(channel):
+    try:
+        lobbies = get_ib_lobbies()
+    except Exception as e:
+        traceback.print_exc()
+
+    closed_lobbies = set()
+    for lobby in open_lobbies:
+        try:
+            message = await channel.fetch_message(lobby.message_id)
+        except Exception as e:
+            traceback.print_exc()
+            continue
+
+        still_open = lobby in lobbies
+        try:
+            await message.edit(embed=lobby.to_discord_embed(still_open))
+        except Exception as e:
+                traceback.print_exc()
+
+        if not still_open:
+            closed_lobbies.add(lobby)
+
+    for lobby in closed_lobbies:
+        open_lobbies.remove(lobby)
+
+    for lobby in lobbies:
+        if lobby not in open_lobbies:
+            try:
+                message = await channel.send(content="at-here?", embed=lobby.to_discord_embed())
+            except Exception as e:
+                traceback.print_exc()
+                continue
+
+            lobby.message_id = message.id
+            open_lobbies.add(lobby)
 
 class DiscordClient(discord.Client):
     def __init__(self, *args, **kwargs):
@@ -46,7 +112,7 @@ class DiscordClient(discord.Client):
                 break
 
         for channel in guild.text_channels:
-            if channel.name == "general":
+            if channel.name == DISCORD_CHANNEL:
                 break
 
         self.guild = guild
@@ -57,12 +123,7 @@ class DiscordClient(discord.Client):
         await self.wait_until_ready()
         while not self.is_closed():
             if self.guild is not None and self.channel is not None:
-                try:
-                    lobbies = get_ib_lobbies()
-                    for lobby in lobbies:
-                        await self.channel.send("{} | {} | {}/{}".format(lobby.name, lobby.map, lobby.slots_taken, lobby.slots_total))
-                except Exception as e:
-                    traceback.print_exc()
+                await report_ib_lobbies(self.channel)
 
             await asyncio.sleep(5)
 
