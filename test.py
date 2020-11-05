@@ -66,6 +66,7 @@ async def report_ib_lobbies(channel):
         lobbies = get_ib_lobbies()
     except Exception as e:
         traceback.print_exc()
+        return
 
     closed_lobbies = set()
     for lobby in open_lobbies:
