@@ -7,8 +7,9 @@ import traceback
 from secret import DISCORD_TOKEN
 
 DISCORD_GUILD = "IB CAFETERIA"
-DISCORD_CHANNEL = "lobbies-test"
+DISCORD_CHANNEL = "pub-games"
 
+# Should persist this in a DB or something
 open_lobbies = set()
 
 class Lobby:
@@ -62,13 +63,15 @@ def get_ib_lobbies():
     return set([lobby for lobby in lobbies if is_ib_lobby(lobby)])
 
 async def report_ib_lobbies(channel):
+    global open_lobbies
+
     try:
         lobbies = get_ib_lobbies()
     except Exception as e:
         traceback.print_exc()
         return
 
-    closed_lobbies = set()
+    new_open_lobbies = set()
     for lobby in open_lobbies:
         try:
             message = await channel.fetch_message(lobby.message_id)
@@ -77,21 +80,26 @@ async def report_ib_lobbies(channel):
             continue
 
         still_open = lobby in lobbies
+        lobby_latest = lobby
+        if still_open:
+            for lobby2 in lobbies:
+                if lobby2 == lobby:
+                    lobby_latest = lobby2
+                    lobby_latest.message_id = lobby.message_id
+                    break
+            new_open_lobbies.add(lobby_latest)
+
         try:
-            await message.edit(embed=lobby.to_discord_embed(still_open))
+            await message.edit(embed=lobby_latest.to_discord_embed(still_open))
         except Exception as e:
                 traceback.print_exc()
 
-        if not still_open:
-            closed_lobbies.add(lobby)
-
-    for lobby in closed_lobbies:
-        open_lobbies.remove(lobby)
+    open_lobbies = new_open_lobbies
 
     for lobby in lobbies:
         if lobby not in open_lobbies:
             try:
-                message = await channel.send(content="at-here?", embed=lobby.to_discord_embed())
+                message = await channel.send(content="", embed=lobby.to_discord_embed())
             except Exception as e:
                 traceback.print_exc()
                 continue
