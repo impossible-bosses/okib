@@ -1,6 +1,8 @@
 import asyncio
+from datetime import datetime
 import discord
 import os
+import pytz
 import requests
 import traceback
 
@@ -8,6 +10,8 @@ from secret import DISCORD_TOKEN
 
 DISCORD_GUILD = "IB CAFETERIA"
 DISCORD_CHANNEL = "pub-games"
+# DISCORD_GUILD = "Test"
+# DISCORD_CHANNEL = "general"
 
 # Should persist this in a DB or something
 open_lobbies = set()
@@ -41,7 +45,8 @@ class Lobby:
             raise Exception("Expected 9 total players, not {}".format(self.slots_total))
 
         map_trimmed = self.map[:-4]
-        embed = discord.Embed(title=map_trimmed, color=(COLOR_OPEN if open else COLOR_CLOSED))
+        embed = discord.Embed(title=map_trimmed, color=(COLOR_OPEN if open else COLOR_CLOSED),
+            timestamp=datetime.fromtimestamp(self.created, tz=pytz.utc))
         embed.add_field(name="Lobby Name", value=self.name, inline=False)
         embed.add_field(name="Host", value=self.host, inline=True)
         embed.add_field(name="Region", value=self.server, inline=True)
@@ -51,6 +56,7 @@ class Lobby:
         return embed
 
 def is_ib_lobby(lobby):
+    # return lobby.map.find("Uther Party") != -1 # test
     return lobby.map.find("Impossible") != -1 and lobby.map.find("Bosses") != -1
 
 def get_ib_lobbies():
