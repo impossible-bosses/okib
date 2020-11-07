@@ -40,7 +40,7 @@ class Lobby:
         if self.map[-4:] != ".w3x":
             raise Exception("Bad map file: {}".format(self.map))
         if self.slots_total != 9:
-            raise Exception("Expected 9 total players, not {}".format(self.slots_total))
+            raise Exception("Expected 9 total players, not {}, for map file {}".format(self.slots_total, self.map))
 
         map_trimmed = self.map[:-4]
         embed = discord.Embed(title=map_trimmed, color=(COLOR_OPEN if open else COLOR_CLOSED))
