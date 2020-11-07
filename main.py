@@ -1,8 +1,6 @@
 import asyncio
-from datetime import datetime
 import discord
 import os
-import pytz
 import requests
 import traceback
 
@@ -45,8 +43,7 @@ class Lobby:
             raise Exception("Expected 9 total players, not {}".format(self.slots_total))
 
         map_trimmed = self.map[:-4]
-        embed = discord.Embed(title=map_trimmed, color=(COLOR_OPEN if open else COLOR_CLOSED),
-            timestamp=datetime.fromtimestamp(self.created, tz=pytz.utc))
+        embed = discord.Embed(title=map_trimmed, color=(COLOR_OPEN if open else COLOR_CLOSED))
         embed.add_field(name="Lobby Name", value=self.name, inline=False)
         embed.add_field(name="Host", value=self.host, inline=True)
         embed.add_field(name="Region", value=self.server, inline=True)
