@@ -10,10 +10,10 @@ import traceback
 
 from secret import DISCORD_TOKEN
 
-# DISCORD_GUILD = "IB CAFETERIA"
-# DISCORD_CHANNEL = "pub-games"
-DISCORD_GUILD = "Test"
-DISCORD_CHANNEL = "general"
+DISCORD_GUILD = "IB CAFETERIA"
+DISCORD_CHANNEL = "pub-games"
+# DISCORD_GUILD = "Test"
+# DISCORD_CHANNEL = "general"
 
 class MapVersion:
     def __init__(self, file_name, ent_only = False, deprecated = False, counterfeit = False):
@@ -227,7 +227,10 @@ class DiscordClient(discord.Client):
 if __name__ == "__main__":
     datetime_now = datetime.datetime.now()
     log_file_name = "logs/{}.log".format(datetime_now.strftime("%Y%m%d_%H%M%S"))
-    logging.basicConfig(filename=log_file_name, level=logging.INFO)
+    logging.basicConfig(
+        filename=log_file_name, level=logging.INFO,
+        format="%(asctime)s | %(levelname)s | %(filename)s:%(lineno)d | %(message)s", datefmt="%Y-%m-%d %H:%M:%S"
+    )
 
     while True:
         client = DiscordClient()
