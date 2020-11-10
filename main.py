@@ -84,13 +84,16 @@ class Lobby:
         message = ""
         if version == None:
             mark = ":question:"
-            message = "*WARNING: Unknown map version*"
+            message = ":warning: *WARNING: Unknown map version* :warning:"
         elif version.counterfeit:
             # mark = ":exclamation:"
             return None
+        elif version.ent_only:
+            mark = ":x:"
+            message = ":warning: *WARNING: Incompatible version* :warning:"
         elif version.deprecated:
             mark = ":x:"
-            message = "*WARNING: Old map version*"
+            message = ":warning: *WARNING: Old map version* :warning:"
 
         embed_title = self.map[:-4] + "  " + mark
         embed = discord.Embed(title=embed_title, color=(COLOR_OPEN if open else COLOR_CLOSED))
