@@ -86,8 +86,8 @@ class Lobby:
             mark = ":question:"
             message = ":warning: *WARNING: Unknown map version* :warning:"
         elif version.counterfeit:
-            # mark = ":exclamation:"
-            return None
+            mark = ":x:"
+            message = ":warning: *WARNING: Counterfeit version* :warning:"
         elif version.ent_only:
             mark = ":x:"
             message = ":warning: *WARNING: Incompatible version* :warning:"
