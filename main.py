@@ -33,7 +33,11 @@ KNOWN_VERSIONS = [
     MapVersion("ImpossibleBossesEnt1.09.w3x", ent_only=True, deprecated=True),
     MapVersion("Impossible_BossesReforgedV1.09_UFWContinues.w3x", counterfeit=True),
     MapVersion("Impossible_BossesReforgedV1.09UFW30.w3x", counterfeit=True),
+    MapVersion("Impossible_BossesReforgedV1.08Test.w3x", deprecated=True),
+    MapVersion("Impossible_BossesTestversion1.06.w3x", deprecated=True),
+    MapVersion("Impossible_BossesReforgedV1.02.w3x", deprecated=True),
     MapVersion("Impossible Bosses BetaV3V.w3x", deprecated=True),
+    MapVersion("Impossible Bosses BetaV3R.w3x", deprecated=True),
 ]
 
 # Should persist this in a DB or something
