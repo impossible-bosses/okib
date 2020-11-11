@@ -1,3 +1,5 @@
+#!/usr/bin/python3.7
+
 import asyncio
 import datetime
 import discord
@@ -252,10 +254,16 @@ class DiscordClient(discord.Client):
             await asyncio.sleep(5)
 
 if __name__ == "__main__":
+    logs_dir = os.path.join(os.path.dirname(os.path.realpath(__file__)), "logs")
+    if not os.path.exists(logs_dir):
+        os.makedirs(logs_dir)
+
     datetime_now = datetime.datetime.now()
-    log_file_name = "logs/{}.log".format(datetime_now.strftime("%Y%m%d_%H%M%S"))
+    log_file_path = os.path.join(logs_dir, "{}.log".format(datetime_now.strftime("%Y%m%d_%H%M%S")))
+    print("Log file: {}".format(log_file_path))
+
     logging.basicConfig(
-        filename=log_file_name, level=logging.INFO,
+        filename=log_file_path, level=logging.INFO,
         format="%(asctime)s | %(levelname)s | %(filename)s:%(lineno)d | %(message)s", datefmt="%Y-%m-%d %H:%M:%S"
     )
 
