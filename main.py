@@ -67,6 +67,7 @@ KNOWN_VERSIONS = [
 
 # Should persist this in a DB or something
 open_lobbies = set()
+wc3stats_down_message = None
 
 def get_map_version(map_file):
     for version in KNOWN_VERSIONS:
@@ -151,14 +152,24 @@ def get_ib_lobbies():
     return set([lobby for lobby in lobbies if is_ib_lobby(lobby)])
 
 async def report_ib_lobbies(channel):
-    global open_lobbies
+    global open_lobbies, wc3stats_down_message
 
     try:
         lobbies = get_ib_lobbies()
     except Exception as e:
         logging.error("Error getting IB lobbies")
         traceback.print_exc()
+
+        if wc3stats_down_message is None:
+            wc3stats_down_message = await channel.send(content=":warning: WARNING: https://wc3stats.com/gamelist API down, no lobby list :warning:")
         return
+
+    if wc3stats_down_message is not None:
+        try:
+            await wc3stats_down_message.delete()
+        except Exception as e:
+            pass
+        wc3stats_down_message = None
 
     new_open_lobbies = set()
     for lobby in open_lobbies:
