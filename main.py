@@ -39,7 +39,7 @@ KNOWN_VERSIONS = [
     MapVersion("Impossible_BossesReforgedV1.08Test.w3x", deprecated=True),
     MapVersion("Impossible_BossesReforgedV1.07Test.w3x", deprecated=True),
     MapVersion("Impossible_BossesTestversion1.06.w3x", deprecated=True),
-    MapVersion("Impossible_BossesReforgedV1.05", deprecated=True),
+    MapVersion("Impossible_BossesReforgedV1.05.w3x", deprecated=True),
     MapVersion("Impossible_BossesReforgedV1.02.w3x", deprecated=True),
 
     MapVersion("Impossible Bosses BetaV3V.w3x", deprecated=True),
