@@ -111,7 +111,7 @@ class Lobby:
             raise Exception("Expected 9 or 12 total players, not {}, for map file {}".format(self.slots_total, self.map))
 
         version = get_map_version(self.map)
-        mark = ":white_check_mark:"
+        mark = ""
         message = ""
         if version == None:
             mark = ":question:"
@@ -126,8 +126,11 @@ class Lobby:
             mark = ":x:"
             message = ":warning: *WARNING: Old map version* :warning:"
 
+        description = "" if open else "*started/unhosted*"
+        color = COLOR_OPEN if open else COLOR_CLOSED
         embed_title = self.map[:-4] + "  " + mark
-        embed = discord.Embed(title=embed_title, color=(COLOR_OPEN if open else COLOR_CLOSED))
+
+        embed = discord.Embed(title=embed_title, description=description, color=color)
         embed.add_field(name="Lobby Name", value=self.name, inline=False)
         embed.add_field(name="Host", value=self.host, inline=True)
         embed.add_field(name="Region", value=self.server, inline=True)
