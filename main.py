@@ -15,6 +15,10 @@ import traceback
 # @archi: I removed explicit param loading for now, but we can bring it back if you want
 import params
 
+ROOT_DIR = os.path.dirname(os.path.realpath(__file__))
+DB_FILE_PATH = os.path.join(ROOT_DIR, "IBCE.db")
+DB_ARCHIVE_PATH = os.path.join(ROOT_DIR, "archive", "IBCE.db")
+
 # communication params
 COM_CHANNEL = None
 imMaster = False
@@ -24,12 +28,11 @@ callback = None
 testvariable = None
 
 # DB related
-conn = sqlite3.connect("IBCE.db")
+conn = sqlite3.connect(DB_FILE_PATH)
 cursor = conn.cursor()
 
 VERSION = 20
 
-root_dir = os.path.dirname(os.path.realpath(__file__))
 open_lobbies = set()
 wc3stats_down_message = None
 
@@ -291,43 +294,42 @@ async def updateDB(att):
     global cursor
     archiveDB()
     await att.save(fp=att.filename)
-    conn = sqlite3.connect('IBCE.db')
+    conn = sqlite3.connect(DB_FILE_PATH)
     cursor = conn.cursor()
     #last_db_entry_startup = getlastdb_entry()
-    await com("ALL","is_syncronized","")
+    await com("ALL", "is_syncronized", "")
 
 def archiveDB():
     conn.close()
-    try :
-        os.mkdir('archive')
+    try:
+        os.mkdir(os.path.dirname(DB_ARCHIVE_PATH))
     except FileExistsError:
         pass
-    os.replace('IBCE.db','archive/IBCE.db')
+    os.replace(DB_FILE_PATH, DB_ARCHIVE_PATH)
 
 async def sendDB(to_id):
-    f = open("IBCE.db", "rb")
-    await COM_CHANNEL.send(str(params.BOT_ID)+ "/"+ str(to_id)+"/DB&",file = discord.File(f.name))
-    f.close()
+    with open(DB_FILE_PATH, "rb") as f:
+        await COM_CHANNEL.send(str(params.BOT_ID) + "/" + str(to_id) + "/DB&", file=discord.File(f.name))
 
-async def parseBotCom(FROM_id,botcom,att = None):
+async def parseBotCom(from_id, botcom, att = None):
     global imMaster
     global ALIVE_INSTANCES
     global master_instance
     global callback
  
-    tag = botcom.split('&')[0]
-    param1 = botcom.split('&')[1]
+    tag = botcom.split("&")[0]
+    param1 = botcom.split("&")[1]
     if tag == "connect":
         #param1 = sender version number
         if int(param1) == VERSION:
             if imMaster:
-                await com(FROM_id,"v",str(VERSION) + "&yes")
+                await com(from_id, "v", str(VERSION) + "&yes")
                 #this is master job to send database and workspace to synchronise newcomer
-                await sendDB(FROM_id)
+                await sendDB(from_id)
                 #TODO
-                #await sendWS(FROM_id)
+                #await sendWS(from_id)
             else:
-                await com(FROM_id,"v",str(VERSION) + "&no")
+                await com(from_id, "v", str(VERSION) + "&no")
         else:
             #VERSION MISSMATCH
             #TODO
@@ -347,20 +349,20 @@ async def parseBotCom(FROM_id,botcom,att = None):
         param2 = botcom.split('&')[2]
         if param1 != "":
             globals()[param1] = param2
-        if FROM_id != master_instance :
+        if from_id != master_instance :
             #some bot has backed up the fallen master
             #consider the previous master down
             ALIVE_INSTANCES.remove(master_instance)
-            master_instance = FROM_id
-            print("master is now "+str(FROM_id))           
+            master_instance = from_id
+            print("master is now " + str(from_id))           
     if tag == "v":
         #alive callback from other bots
         #needed so every instance knows who's master and increments ALIVE_INSTANCE
-        isMaster = botcom.split('&')[2]
+        isMaster = botcom.split("&")[2]
         if isMaster == "yes":     
-            master_instance = FROM_id
+            master_instance = from_id
             callback.cancel()    
-        ALIVE_INSTANCES.append(FROM_id)   
+        ALIVE_INSTANCES.append(from_id)   
     if tag == "pythonFile":
         await updatePython(att)
     if tag == "updateMe":
@@ -450,6 +452,23 @@ class DiscordClient(discord.ext.commands.Bot):
         await com("ALL", "connect", str(VERSION))
         callback = Timer(3, functools.partial(self_promote, "forces"))
 
+    async def on_message(self, message):
+        if message.author.id == 698490662143655967 and message.channel == COM_CHANNEL:
+            #from this bot
+            FROM_id = int(message.content.split("/")[0])
+            TO = message.content.split("/")[1]
+            real_content = message.content.split("/")[2]
+
+            if FROM_id != params.BOT_ID and (TO == "ALL" or TO == str(params.BOT_ID)):
+                #from another bot
+                print("communication received from : " + str(FROM_id) + " to " + TO + " content = " + real_content)
+                if not message.attachments:
+                    await parseBotCom(FROM_id,real_content)
+                else :
+                    await parseBotCom(FROM_id,real_content,message.attachments[0])
+        else:
+            await client.process_commands(message)
+
     async def refresh_ib_lobbies(self):
         await self.wait_until_ready()
         while not self.is_closed():
@@ -462,23 +481,6 @@ class DiscordClient(discord.ext.commands.Bot):
                     traceback.print_exc()
 
             await asyncio.sleep(5)
-
-    async def on_message(self, message):
-        if message.author.id == 698490662143655967 and message.channel == COM_CHANNEL:
-            #from this bot
-            FROM_id = int(message.content.split('/')[0])
-            TO = message.content.split('/')[1]
-            real_content = message.content.split('/')[2]
-
-            if FROM_id != params.BOT_ID and (TO == "ALL" or TO == str(params.BOT_ID)):
-                #from another bot
-                print("communication received from : " + str(FROM_id) + " to " + TO + " content = " + real_content)
-                if not message.attachments:
-                    await parseBotCom(FROM_id,real_content)
-                else :
-                    await parseBotCom(FROM_id,real_content,message.attachments[0])
-        else:
-            await client.process_commands(message)
 
 if __name__ == "__main__":
     logs_dir = os.path.join(root_dir, "logs")
@@ -494,7 +496,6 @@ if __name__ == "__main__":
         format="%(asctime)s | %(levelname)s | %(filename)s:%(lineno)d | %(message)s", datefmt="%Y-%m-%d %H:%M:%S"
     )
 
-    
-    client = DiscordClient(command_prefix='+')
+    client = DiscordClient(command_prefix="+")
     client.run(params.BOT_TOKEN)
     time.sleep(10)
