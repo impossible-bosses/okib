@@ -4,13 +4,14 @@ import asyncio
 import datetime
 import discord
 from enum import Enum, auto
+import git
 import logging
 import os
 import requests
 import time
 import traceback
 
-from secret import DISCORD_TOKEN
+import secret
 
 DISCORD_GUILD = "IB CAFETERIA"
 DISCORD_CHANNEL = "pub-games"
@@ -66,7 +67,7 @@ KNOWN_VERSIONS = [
     MapVersion("Impossible Bosses BetaV1C.w3x", deprecated=True),
 ]
 
-# Should persist this in a DB or something
+root_dir = os.path.dirname(os.path.realpath(__file__))
 open_lobbies = set()
 wc3stats_down_message = None
 
@@ -229,7 +230,7 @@ class DiscordClient(discord.Client):
         super().__init__(*args, **kwargs)
 
         # create the background task and run it in the background
-        self.bg_task = self.loop.create_task(self.my_background_task())
+        self.bg_task = self.loop.create_task(self.refresh_ib_lobbies())
         self.guild = None
 
     async def on_ready(self):
@@ -255,7 +256,7 @@ class DiscordClient(discord.Client):
         self.channel = channel
         logging.info("Bot \"{}\" connected to Discord on guild \"{}\", posting to channel \"{}\"".format(self.user, guild.name, channel.name))
 
-    async def my_background_task(self):
+    async def refresh_ib_lobbies(self):
         await self.wait_until_ready()
         while not self.is_closed():
             logging.info("Refreshing lobby list")
@@ -268,8 +269,23 @@ class DiscordClient(discord.Client):
 
             await asyncio.sleep(5)
 
+    async def on_message(self, message):
+        channel = message.channel
+        if isinstance(channel, discord.DMChannel):
+            if message.content == secret.UPDATE_KEY:
+                # await message.delete()  # not allowed, it seems
+                await channel.send(content="Received update key. Pulling latest code and rebooting...")
+                repo = git.Repo(root_dir)
+                for remote in repo.remotes:
+                    if remote.name == "origin":
+                        logging.info("Pulling latest code from remote {}".format(remote))
+                        remote.pull()
+                        logging.info("Exiting bot instance")
+                        exit(0)
+
+
 if __name__ == "__main__":
-    logs_dir = os.path.join(os.path.dirname(os.path.realpath(__file__)), "logs")
+    logs_dir = os.path.join(root_dir, "logs")
     if not os.path.exists(logs_dir):
         os.makedirs(logs_dir)
 
@@ -284,5 +300,5 @@ if __name__ == "__main__":
 
     while True:
         client = DiscordClient()
-        client.run(DISCORD_TOKEN)
+        client.run(secret.DISCORD_TOKEN)
         time.sleep(10)
