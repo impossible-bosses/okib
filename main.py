@@ -404,7 +404,7 @@ class DiscordClient(discord.ext.commands.Bot):
             if key == params.UPDATE_KEY:
                 p = functools.partial(ctx.channel.send, "Received update key. Pulling latest code and rebooting...")
                 await ensureDisplay(p)
-                repo = git.Repo(root_dir)
+                repo = git.Repo(ROOT_DIR)
                 for remote in repo.remotes:
                     if remote.name == "origin":
                         logging.info("Pulling latest code from remote {}".format(remote))
@@ -483,7 +483,7 @@ class DiscordClient(discord.ext.commands.Bot):
             await asyncio.sleep(5)
 
 if __name__ == "__main__":
-    logs_dir = os.path.join(root_dir, "logs")
+    logs_dir = os.path.join(ROOT_DIR, "logs")
     if not os.path.exists(logs_dir):
         os.makedirs(logs_dir)
 
