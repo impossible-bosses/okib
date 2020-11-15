@@ -325,7 +325,7 @@ async def parseBotCom(FROM_id,botcom,att = None):
                 #this is master job to send database and workspace to synchronise newcomer
                 await sendDB(FROM_id)
                 #TODO
-                await sendWS(FROM_id)
+                #await sendWS(FROM_id)
             else:
                 await com(FROM_id,"v",str(VERSION) + "&no")
         else:
