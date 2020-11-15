@@ -1,2 +1,3 @@
-secret.py
+params.py
+__pycache__/
 logs/

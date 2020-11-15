@@ -1,22 +1,37 @@
-#!/usr/bin/python3.7
-
 import asyncio
 import datetime
 import discord
+from discord.ext import commands
 from enum import Enum, auto
+import functools
 import git
 import logging
 import os
 import requests
+import sqlite3
 import time
 import traceback
 
-import secret
+# @archi: I removed explicit param loading for now, but we can bring it back if you want
+import params
 
-DISCORD_GUILD = "IB CAFETERIA"
-DISCORD_CHANNEL = "pub-games"
-# DISCORD_GUILD = "Test"
-# DISCORD_CHANNEL = "general"
+# communication params
+COM_CHANNEL = None
+imMaster = False
+ALIVE_INSTANCES = []
+master_instance = None
+callback = None
+testvariable = None
+
+# DB related
+conn = sqlite3.connect("IBCE.db")
+cursor = conn.cursor()
+
+VERSION = 20
+
+root_dir = os.path.dirname(os.path.realpath(__file__))
+open_lobbies = set()
+wc3stats_down_message = None
 
 class MapVersion:
     def __init__(self, file_name, ent_only = False, deprecated = False, counterfeit = False):
@@ -66,10 +81,6 @@ KNOWN_VERSIONS = [
     MapVersion("Impossible Bosses BetaV1P.w3x", deprecated=True),
     MapVersion("Impossible Bosses BetaV1C.w3x", deprecated=True),
 ]
-
-root_dir = os.path.dirname(os.path.realpath(__file__))
-open_lobbies = set()
-wc3stats_down_message = None
 
 def get_map_version(map_file):
     for version in KNOWN_VERSIONS:
@@ -225,36 +236,219 @@ async def report_ib_lobbies(channel):
             lobby.message_id = message.id
             open_lobbies.add(lobby)
 
-class DiscordClient(discord.Client):
+async def com(to_id, key, value = ""):
+    await COM_CHANNEL.send(str(params.BOT_ID) + "/" + str(to_id) + "/" + key + "&" + value)
+
+async def self_promote(case = None):
+    global imMaster
+    global master_instance
+    global ALIVE_INSTANCES
+    
+    imMaster = True
+    await com("ALL","letmaster")
+    master_instance = params.BOT_ID
+    if case == "forced":
+        ALIVE_INSTANCES.append(params.BOT_ID)
+    print("i'm in charge !")
+
+async def ensureDisplay(fun, tobereturned = None):
+    global callback
+    if imMaster:
+        if tobereturned != None:
+            globals()[tobereturned] = await fun()
+            await com("ALL", "rb", str(tobereturned) + "&" + str(testvariable))
+        else:
+            await fun()
+            await com("ALL", "rb", "&")
+    else:
+        bakup = functools.partial(backupMaster, fun, tobereturned)
+        callback = Timer(2, bakup)
+
+async def backupMaster(fun, tobereturned):
+    global ALIVE_INSTANCES
+    global master_instance
+    global callback
+    print(ALIVE_INSTANCES)
+    print(master_instance)
+    
+    if master_instance == None:
+        ALIVE_INSTANCES.remove(max(ALIVE_INSTANCES))
+    else:
+        ALIVE_INSTANCES.remove(master_instance)
+        master_instance = None
+    if max(ALIVE_INSTANCES) == params.BOT_ID:
+        await self_promote()
+        if tobereturned is not None:
+            globals()[tobereturned] = await fun()
+        else:
+            await fun()
+    else:
+        bakup = functools.partial(backupMaster, fun, tobereturned)
+        callback = Timer(2, bakup)
+
+async def updateDB(att):
+    global conn
+    global cursor
+    archiveDB()
+    await att.save(fp=att.filename)
+    conn = sqlite3.connect('IBCE.db')
+    cursor = conn.cursor()
+    #last_db_entry_startup = getlastdb_entry()
+    await com("ALL","is_syncronized","")
+
+def archiveDB():
+    conn.close()
+    try :
+        os.mkdir('archive')
+    except FileExistsError:
+        pass
+    os.replace('IBCE.db','archive/IBCE.db')
+
+async def sendDB(to_id):
+    f = open("IBCE.db", "rb")
+    await COM_CHANNEL.send(str(params.BOT_ID)+ "/"+ str(to_id)+"/DB&",file = discord.File(f.name))
+    f.close()
+
+async def parseBotCom(FROM_id,botcom,att = None):
+    global imMaster
+    global ALIVE_INSTANCES
+    global master_instance
+    global callback
+ 
+    tag = botcom.split('&')[0]
+    param1 = botcom.split('&')[1]
+    if tag == "connect":
+        #param1 = sender version number
+        if int(param1) == VERSION:
+            if imMaster:
+                await com(FROM_id,"v",str(VERSION) + "&yes")
+                #this is master job to send database and workspace to synchronise newcomer
+                await sendDB(FROM_id)
+                #TODO
+                await sendWS(FROM_id)
+            else:
+                await com(FROM_id,"v",str(VERSION) + "&no")
+        else:
+            #VERSION MISSMATCH
+            #TODO
+            pass
+            
+#             await requestUpdate()
+#         elif int(param1) < VERSION:
+#             await letMaster()
+#             await sendPython()
+#         else:
+#             bot_master = False
+#             await giveMaster()
+    if tag == "rb" :
+        #stop monitoring display integrity
+        callback.cancel()
+        #we might have some value to affect that can only be done by the master
+        param2 = botcom.split('&')[2]
+        if param1 != "":
+            globals()[param1] = param2
+        if FROM_id != master_instance :
+            #some bot has backed up the fallen master
+            #consider the previous master down
+            ALIVE_INSTANCES.remove(master_instance)
+            master_instance = FROM_id
+            print("master is now "+str(FROM_id))           
+    if tag == "v":
+        #alive callback from other bots
+        #needed so every instance knows who's master and increments ALIVE_INSTANCE
+        isMaster = botcom.split('&')[2]
+        if isMaster == "yes":     
+            master_instance = FROM_id
+            callback.cancel()    
+        ALIVE_INSTANCES.append(FROM_id)   
+    if tag == "pythonFile":
+        await updatePython(att)
+    if tag == "updateMe":
+        await sendPython()
+    if tag == "DB":
+        ALIVE_INSTANCES.append(params.BOT_ID)
+        await updateDB(att)
+    if tag == "is_syncronized":
+        pass
+
+class Timer:
+    def __init__(self, timeout, callback):
+        self._timeout = timeout
+        self._callback = callback
+        self._task = asyncio.ensure_future(self._job())
+        
+    async def _job(self):
+        await asyncio.sleep(self._timeout)
+        await self._callback()
+
+    def cancel(self):
+        self._task.cancel()
+
+class DiscordClient(discord.ext.commands.Bot):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-        # create the background task and run it in the background
-        self.bg_task = self.loop.create_task(self.refresh_ib_lobbies())
+        #self.bg_task = self.loop.create_task(self.refresh_ib_lobbies())
         self.guild = None
+        self.pub_channel = None
+
+        @self.command()
+        async def test(ctx):
+            p = functools.partial(ctx.channel.send, "working!")
+            await ensureDisplay(p)
+
+        @self.command()
+        async def update(ctx, key):
+            if key == params.UPDATE_KEY:
+                p = functools.partial(ctx.channel.send, "Received update key. Pulling latest code and rebooting...")
+                await ensureDisplay(p)
+                repo = git.Repo(root_dir)
+                for remote in repo.remotes:
+                    if remote.name == "origin":
+                        logging.info("Pulling latest code from remote {}".format(remote))
+                        remote.pull()
+                        logging.info("Rebooting")
+                        exit()
+                        # os.system("shutdown /r /t 1")
 
     async def on_ready(self):
-        found_guild = False
+        global COM_CHANNEL
+        global callback
+
+        guild_ib = None
+        guild_com = None
         for guild in self.guilds:
-            if guild.name == DISCORD_GUILD:
-                found_guild = True
-                break
+            if guild.name == params.GUILD_NAME:
+                guild_ib = guild
+            if guild.id == params.COM_GUILD_ID:
+                guild_com = guild
 
-        if not found_guild:
-            raise Exception("Guild not found: \"{}\"".format(DISCORD_GUILD))
+        if guild_ib is None:
+            raise Exception("IB guild not found: \"{}\"".format(params.GUILD_NAME))
+        if guild_com is None:
+            raise Exception("Com virtual guild not found")
 
-        found_channel = False
-        for channel in guild.text_channels:
-            if channel.name == DISCORD_CHANNEL:
-                found_channel = True
-                break
+        channel_pub = None
+        for channel in guild_ib.text_channels:
+            if channel.name == params.PUB_CHANNEL_NAME:
+                channel_pub = channel
+        if channel_pub is None:
+            raise Exception("Pub channel not found: \"{}\" in guild \"{}\"".format(params.PUB_CHANNEL_NAME, guild_ib.name))
 
-        if not found_channel:
-            raise Exception("Channel not found: \"{}\" in guild \"{}\"".format(DISCORD_CHANNEL, guild.name))
+        channel_com = None
+        for channel in guild_com.text_channels:
+            if channel.id == params.COM_CHANNEL_ID:
+                channel_com = channel
+        if channel_com is None:
+            raise Exception("Com channel not found")
 
-        self.guild = guild
-        self.channel = channel
-        logging.info("Bot \"{}\" connected to Discord on guild \"{}\", posting to channel \"{}\"".format(self.user, guild.name, channel.name))
+        self.guild = guild_ib
+        self.channel_pub = channel_pub
+        logging.info("Bot \"{}\" connected to Discord on guild \"{}\", posting to channel \"{}\"".format(self.user, guild_ib.name, channel_pub.name))
+
+        COM_CHANNEL = channel_com
+        await com("ALL", "connect", str(VERSION))
+        callback = Timer(3, functools.partial(self_promote, "forces"))
 
     async def refresh_ib_lobbies(self):
         await self.wait_until_ready()
@@ -270,19 +464,21 @@ class DiscordClient(discord.Client):
             await asyncio.sleep(5)
 
     async def on_message(self, message):
-        channel = message.channel
-        if isinstance(channel, discord.DMChannel):
-            if message.content == secret.UPDATE_KEY:
-                # await message.delete()  # not allowed, it seems
-                await channel.send(content="Received update key. Pulling latest code and rebooting...")
-                repo = git.Repo(root_dir)
-                for remote in repo.remotes:
-                    if remote.name == "origin":
-                        logging.info("Pulling latest code from remote {}".format(remote))
-                        remote.pull()
-                        logging.info("Exiting bot instance")
-                        exit(0)
+        if message.author.id == 698490662143655967 and message.channel == COM_CHANNEL:
+            #from this bot
+            FROM_id = int(message.content.split('/')[0])
+            TO = message.content.split('/')[1]
+            real_content = message.content.split('/')[2]
 
+            if FROM_id != params.BOT_ID and (TO == "ALL" or TO == str(params.BOT_ID)):
+                #from another bot
+                print("communication received from : " + str(FROM_id) + " to " + TO + " content = " + real_content)
+                if not message.attachments:
+                    await parseBotCom(FROM_id,real_content)
+                else :
+                    await parseBotCom(FROM_id,real_content,message.attachments[0])
+        else:
+            await client.process_commands(message)
 
 if __name__ == "__main__":
     logs_dir = os.path.join(root_dir, "logs")
@@ -298,7 +494,7 @@ if __name__ == "__main__":
         format="%(asctime)s | %(levelname)s | %(filename)s:%(lineno)d | %(message)s", datefmt="%Y-%m-%d %H:%M:%S"
     )
 
-    while True:
-        client = DiscordClient()
-        client.run(secret.DISCORD_TOKEN)
-        time.sleep(10)
+    
+    client = DiscordClient(command_prefix='+')
+    client.run(params.BOT_TOKEN)
+    time.sleep(10)
