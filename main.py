@@ -1,6 +1,7 @@
 import asyncio
 import datetime
 import discord
+from discord.ext.tasks import loop
 from discord.ext import commands
 from enum import Enum, auto
 import functools
@@ -9,17 +10,26 @@ import logging
 import os
 import requests
 import sqlite3
+import sys
 import time
 import traceback
 
 # @archi: I removed explicit param loading for now, but we can bring it back if you want
 import params
 
+# CONSTANTS
 ROOT_DIR = os.path.dirname(os.path.realpath(__file__))
 DB_FILE_PATH = os.path.join(ROOT_DIR, "IBCE.db")
 DB_ARCHIVE_PATH = os.path.join(ROOT_DIR, "archive", "IBCE.db")
 
-# communication params
+VERSION = 20
+
+# discord connection
+_client = discord.ext.commands.Bot(command_prefix="+")
+_guild = None
+_pub_channel = None
+
+# communication
 COM_CHANNEL = None
 imMaster = False
 ALIVE_INSTANCES = []
@@ -27,14 +37,14 @@ master_instance = None
 callback = None
 testvariable = None
 
-# DB related
+# DB
 conn = sqlite3.connect(DB_FILE_PATH)
 cursor = conn.cursor()
 
-VERSION = 20
-
-open_lobbies = set()
-wc3stats_down_message = None
+# lobbies
+_lobbies_task = None
+_open_lobbies = set()
+_wc3stats_down_message = None
 
 class MapVersion:
     def __init__(self, file_name, ent_only = False, deprecated = False, counterfeit = False):
@@ -171,7 +181,7 @@ def get_ib_lobbies():
     return set([lobby for lobby in lobbies if is_ib_lobby(lobby)])
 
 async def report_ib_lobbies(channel):
-    global open_lobbies, wc3stats_down_message
+    global _open_lobbies, _wc3stats_down_message
 
     try:
         lobbies = get_ib_lobbies()
@@ -179,19 +189,19 @@ async def report_ib_lobbies(channel):
         logging.error("Error getting IB lobbies")
         traceback.print_exc()
 
-        if wc3stats_down_message is None:
-            wc3stats_down_message = await channel.send(content=":warning: WARNING: https://wc3stats.com/gamelist API down, no lobby list :warning:")
+        if _wc3stats_down_message is None:
+            _wc3stats_down_message = await channel.send(content=":warning: WARNING: https://wc3stats.com/gamelist API down, no lobby list :warning:")
         return
 
-    if wc3stats_down_message is not None:
+    if _wc3stats_down_message is not None:
         try:
-            await wc3stats_down_message.delete()
+            await _wc3stats_down_message.delete()
         except Exception as e:
             pass
-        wc3stats_down_message = None
+        _wc3stats_down_message = None
 
     new_open_lobbies = set()
-    for lobby in open_lobbies:
+    for lobby in _open_lobbies:
         try:
             message = await channel.fetch_message(lobby.message_id)
         except Exception as e:
@@ -220,10 +230,10 @@ async def report_ib_lobbies(channel):
             logging.error("Failed to edit message for lobby \"{}\"".format(lobby_latest.name))
             traceback.print_exc()
 
-    open_lobbies = new_open_lobbies
+    _open_lobbies = new_open_lobbies
 
     for lobby in lobbies:
-        if lobby not in open_lobbies:
+        if lobby not in _open_lobbies:
             try:
                 message_info = lobby.to_discord_message_info()
                 if message_info is None:
@@ -237,7 +247,20 @@ async def report_ib_lobbies(channel):
                 continue
 
             lobby.message_id = message.id
-            open_lobbies.add(lobby)
+            _open_lobbies.add(lobby)
+
+class Timer:
+    def __init__(self, timeout, callback):
+        self._timeout = timeout
+        self._callback = callback
+        self._task = asyncio.ensure_future(self._job())
+        
+    async def _job(self):
+        await asyncio.sleep(self._timeout)
+        await self._callback()
+
+    def cancel(self):
+        self._task.cancel()
 
 async def com(to_id, key, value = ""):
     await COM_CHANNEL.send(str(params.BOT_ID) + "/" + str(to_id) + "/" + key + "&" + value)
@@ -252,7 +275,7 @@ async def self_promote(case = None):
     master_instance = params.BOT_ID
     if case == "forced":
         ALIVE_INSTANCES.append(params.BOT_ID)
-    print("i'm in charge !")
+    logging.info("I'm in charge!")
 
 async def ensureDisplay(fun, tobereturned = None):
     global callback
@@ -271,8 +294,8 @@ async def backupMaster(fun, tobereturned):
     global ALIVE_INSTANCES
     global master_instance
     global callback
-    print(ALIVE_INSTANCES)
-    print(master_instance)
+    logging.info(ALIVE_INSTANCES)
+    logging.info(master_instance)
     
     if master_instance == None:
         ALIVE_INSTANCES.remove(max(ALIVE_INSTANCES))
@@ -354,7 +377,7 @@ async def parseBotCom(from_id, botcom, att = None):
             #consider the previous master down
             ALIVE_INSTANCES.remove(master_instance)
             master_instance = from_id
-            print("master is now " + str(from_id))           
+            logging.info("master is now " + str(from_id))           
     if tag == "v":
         #alive callback from other bots
         #needed so every instance knows who's master and increments ALIVE_INSTANCE
@@ -373,114 +396,96 @@ async def parseBotCom(from_id, botcom, att = None):
     if tag == "is_syncronized":
         pass
 
-class Timer:
-    def __init__(self, timeout, callback):
-        self._timeout = timeout
-        self._callback = callback
-        self._task = asyncio.ensure_future(self._job())
-        
-    async def _job(self):
-        await asyncio.sleep(self._timeout)
-        await self._callback()
+@_client.command()
+async def test(ctx):
+    p = functools.partial(ctx.channel.send, "working!")
+    await ensureDisplay(p)
 
-    def cancel(self):
-        self._task.cancel()
+@_client.command()
+async def update(ctx, key):
+    if key == params.UPDATE_KEY:
+        p = functools.partial(ctx.channel.send, "Received update key. Pulling latest code and rebooting...")
+        await ensureDisplay(p)
+        repo = git.Repo(ROOT_DIR)
+        for remote in repo.remotes:
+            if remote.name == "origin":
+                logging.info("Pulling latest code from remote {}".format(remote))
+                remote.pull()
+                logging.info("Rebooting")
+                exit()
+                # os.system("shutdown /r /t 1")
 
-class DiscordClient(discord.ext.commands.Bot):
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
+@_client.event
+async def on_ready():
+    global COM_CHANNEL
+    global callback
 
-        #self.bg_task = self.loop.create_task(self.refresh_ib_lobbies())
-        self.guild = None
-        self.pub_channel = None
+    guild_ib = None
+    guild_com = None
+    for guild in _client.guilds:
+        if guild.name == params.GUILD_NAME:
+            guild_ib = guild
+        if guild.id == params.COM_GUILD_ID:
+            guild_com = guild
 
-        @self.command()
-        async def test(ctx):
-            p = functools.partial(ctx.channel.send, "working!")
-            await ensureDisplay(p)
+    if guild_ib is None:
+        raise Exception("IB guild not found: \"{}\"".format(params.GUILD_NAME))
+    if guild_com is None:
+        raise Exception("Com virtual guild not found")
 
-        @self.command()
-        async def update(ctx, key):
-            if key == params.UPDATE_KEY:
-                p = functools.partial(ctx.channel.send, "Received update key. Pulling latest code and rebooting...")
-                await ensureDisplay(p)
-                repo = git.Repo(ROOT_DIR)
-                for remote in repo.remotes:
-                    if remote.name == "origin":
-                        logging.info("Pulling latest code from remote {}".format(remote))
-                        remote.pull()
-                        logging.info("Rebooting")
-                        exit()
-                        # os.system("shutdown /r /t 1")
+    channel_pub = None
+    for channel in guild_ib.text_channels:
+        if channel.name == params.PUB_CHANNEL_NAME:
+            channel_pub = channel
+    if channel_pub is None:
+        raise Exception("Pub channel not found: \"{}\" in guild \"{}\"".format(params.PUB_CHANNEL_NAME, guild_ib.name))
 
-    async def on_ready(self):
-        global COM_CHANNEL
-        global callback
+    channel_com = None
+    for channel in guild_com.text_channels:
+        if channel.id == params.COM_CHANNEL_ID:
+            channel_com = channel
+    if channel_com is None:
+        raise Exception("Com channel not found")
 
-        guild_ib = None
-        guild_com = None
-        for guild in self.guilds:
-            if guild.name == params.GUILD_NAME:
-                guild_ib = guild
-            if guild.id == params.COM_GUILD_ID:
-                guild_com = guild
+    _guild = guild_ib
+    _pub_channel = channel_pub
+    logging.info("Bot \"{}\" connected to Discord on guild \"{}\", pub channel \"{}\"".format(_client.user, guild_ib.name, channel_pub.name))
 
-        if guild_ib is None:
-            raise Exception("IB guild not found: \"{}\"".format(params.GUILD_NAME))
-        if guild_com is None:
-            raise Exception("Com virtual guild not found")
+    COM_CHANNEL = channel_com
+    await com("ALL", "connect", str(VERSION))
+    callback = Timer(3, functools.partial(self_promote, "forces"))
 
-        channel_pub = None
-        for channel in guild_ib.text_channels:
-            if channel.name == params.PUB_CHANNEL_NAME:
-                channel_pub = channel
-        if channel_pub is None:
-            raise Exception("Pub channel not found: \"{}\" in guild \"{}\"".format(params.PUB_CHANNEL_NAME, guild_ib.name))
+@_client.event
+async def on_message(message):
+    if message.author.id == 698490662143655967 and message.channel == COM_CHANNEL:
+        #from this bot
+        FROM_id = int(message.content.split("/")[0])
+        TO = message.content.split("/")[1]
+        real_content = message.content.split("/")[2]
 
-        channel_com = None
-        for channel in guild_com.text_channels:
-            if channel.id == params.COM_CHANNEL_ID:
-                channel_com = channel
-        if channel_com is None:
-            raise Exception("Com channel not found")
+        if FROM_id != params.BOT_ID and (TO == "ALL" or TO == str(params.BOT_ID)):
+            #from another bot
+            logging.info("communication received from : " + str(FROM_id) + " to " + TO + " content = " + real_content)
+            if not message.attachments:
+                await parseBotCom(FROM_id,real_content)
+            else :
+                await parseBotCom(FROM_id,real_content,message.attachments[0])
+    else:
+        await _client.process_commands(message)
 
-        self.guild = guild_ib
-        self.channel_pub = channel_pub
-        logging.info("Bot \"{}\" connected to Discord on guild \"{}\", posting to channel \"{}\"".format(self.user, guild_ib.name, channel_pub.name))
+@loop(seconds=5)
+async def refresh_ib_lobbies():
+    logging.info("Refreshing lobby list")
+    if _pub_channel is not None:
+        try:
+            await report_ib_lobbies(_pub_channel)
+        except Exception as e:
+            logging.error("Exception in report_ib_lobbies")
+            traceback.print_exc()
 
-        COM_CHANNEL = channel_com
-        await com("ALL", "connect", str(VERSION))
-        callback = Timer(3, functools.partial(self_promote, "forces"))
-
-    async def on_message(self, message):
-        if message.author.id == 698490662143655967 and message.channel == COM_CHANNEL:
-            #from this bot
-            FROM_id = int(message.content.split("/")[0])
-            TO = message.content.split("/")[1]
-            real_content = message.content.split("/")[2]
-
-            if FROM_id != params.BOT_ID and (TO == "ALL" or TO == str(params.BOT_ID)):
-                #from another bot
-                print("communication received from : " + str(FROM_id) + " to " + TO + " content = " + real_content)
-                if not message.attachments:
-                    await parseBotCom(FROM_id,real_content)
-                else :
-                    await parseBotCom(FROM_id,real_content,message.attachments[0])
-        else:
-            await client.process_commands(message)
-
-    async def refresh_ib_lobbies(self):
-        await self.wait_until_ready()
-        while not self.is_closed():
-            logging.info("Refreshing lobby list")
-            if self.guild is not None and self.channel is not None:
-                try:
-                    await report_ib_lobbies(self.channel)
-                except Exception as e:
-                    logging.error("Exception in report_ib_lobbies")
-                    traceback.print_exc()
-
-            await asyncio.sleep(5)
+@refresh_ib_lobbies.before_loop
+async def refresh_ib_lobbies_before():
+    await _client.wait_until_ready()
 
 if __name__ == "__main__":
     logs_dir = os.path.join(ROOT_DIR, "logs")
@@ -495,7 +500,7 @@ if __name__ == "__main__":
         filename=log_file_path, level=logging.INFO,
         format="%(asctime)s | %(levelname)s | %(filename)s:%(lineno)d | %(message)s", datefmt="%Y-%m-%d %H:%M:%S"
     )
+    logging.getLogger().addHandler(logging.StreamHandler(sys.stdout))
 
-    client = DiscordClient(command_prefix="+")
-    client.run(params.BOT_TOKEN)
-    time.sleep(10)
+    refresh_ib_lobbies.start()
+    _client.run(params.BOT_TOKEN)
