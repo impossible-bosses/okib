@@ -287,10 +287,6 @@ async def ensure_display(timeout, func, *args, **kwargs):
             return await ensure_display(timeout, func, *args, **kwargs)
 
 @_client.command()
-async def test(ctx):
-    await ensure_display(5, send_message, ctx.channel, "working!")
-
-@_client.command()
 async def update(ctx, key):
     if key == params.UPDATE_KEY:
         # No ensure_display here because this isn't a distributed action
@@ -514,7 +510,7 @@ class Lobby:
         }
 
 def is_ib_lobby(lobby):
-    return lobby.map.find("Uther Party") != -1 # test
+    # return lobby.map.find("Uther Party") != -1 # test
     return lobby.map.find("Impossible") != -1 and lobby.map.find("Bosses") != -1
 
 def get_ib_lobbies():
