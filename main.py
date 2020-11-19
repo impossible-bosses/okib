@@ -308,7 +308,7 @@ async def ensure_display(timeout, func, *args, **kwargs):
 @_client.command()
 async def ping(ctx):
     if isinstance(ctx.channel, discord.channel.DMChannel):
-        await ensure_display(send_message, ctx.channel, "pong")
+        await ensure_display(5, send_message, ctx.channel, "pong")
 
 @_client.command()
 async def update(ctx, key):
