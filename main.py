@@ -7,6 +7,7 @@ from enum import Enum, auto
 import git
 import logging
 import os
+import pickle
 import requests
 import sqlite3
 import sys
@@ -42,6 +43,10 @@ class MessageType(Enum):
     CONNECT_ACK = "connectack"
     LET_MASTER = "letmaster"
     ENSURE_DISPLAY = "ensure"
+    SEND_DB = "senddb"
+    SEND_DB_ACK = "senddback"
+    SEND_WORKSPACE = "sendws"
+    SEND_WORKSPACE_ACK = "sendwsack"
 
 class MessageWaitQueue:
     def __init__(self):
@@ -88,17 +93,61 @@ class MessageHub:
 
 _com_hub = MessageHub()
 
-async def com(to_id, message_type, message = ""):
+async def com(to_id, message_type, message = "", file = None):
     assert isinstance(to_id, int)
     assert isinstance(message_type, MessageType)
     assert isinstance(message, str)
 
-    await _com_channel.send("/".join([
+    payload = "/".join([
         str(params.BOT_ID),
         str(to_id),
         message_type.value,
         message
-    ]))
+    ])
+    if file is None:
+        await _com_channel.send(payload)
+    else:
+        await _com_channel.send(payload, file=file)
+
+def archive_db():
+    global _db_conn
+
+    _db_conn.close()
+    try:
+        os.mkdir(os.path.dirname(DB_ARCHIVE_PATH))
+    except FileExistsError:
+        pass
+    os.replace(DB_FILE_PATH, DB_ARCHIVE_PATH)
+
+async def update_db(db_bytes):
+    global _db_conn
+
+    archive_db()
+    with open(DB_FILE_PATH, "wb") as f:
+        f.write(db_bytes)
+
+    _db_conn = sqlite3.connect(DB_FILE_PATH)
+    _db_cursor = _db_conn.cursor()
+    await com("ALL", "is_syncronized", "")
+
+async def send_db(to_id):
+    with open(DB_FILE_PATH, "rb") as f:
+        await com(to_id, MessageType.SEND_DB, "", discord.File(f))
+
+def update_workspace(file):
+    global _open_lobbies, _wc3stats_down_message
+
+    workspace_obj = pickle.load(file)
+    _open_lobbies = workspace_obj["open_lobbies"]
+    _wc3stats_down_message = workspace_obj["wc3stats_down_message"]
+
+async def send_workspace(to_id):
+    workspace_obj = {
+        "open_lobbies": _open_lobbies,
+        "wc3stats_down_message": _wc3stats_down_message
+    }
+    workspace_bytes = pickle.dumps(workspace_obj)
+    await com(to_id, MessageType.SEND_WORKSPACE, "", discord.File(workspace_bytes))
 
 async def parse_bot_com(from_id, message_type, message, attachment):
     global _im_master, _alive_instances, _master_instance
@@ -106,7 +155,9 @@ async def parse_bot_com(from_id, message_type, message, attachment):
     if message_type == MessageType.CONNECT:
         if _im_master:
             await com(from_id, MessageType.CONNECT_ACK, str(VERSION) + "+")
-            # TODO send DB
+            # It is master's responsibility to send DB and workspace to synchronize newcomer
+            await send_db(from_id)
+            await send_workspace(from_id)
         else:
             await com(from_id, MessageType.CONNECT_ACK, str(VERSION))
 
@@ -130,6 +181,18 @@ async def parse_bot_com(from_id, message_type, message, attachment):
         _master_instance = from_id
     elif message_type == MessageType.ENSURE_DISPLAY:
         pass
+    elif message_type == MessageType.SEND_DB:
+        db_bytes = attachment.read()
+        await update_db(db_bytes)
+    elif message_type == MessageType.SEND_DB_ACK:
+        pass
+    elif message_type == MessageType.SEND_WORKSPACE:
+        workspace_bytes = attachment.read()
+        update_workspace(workspace_bytes)
+    elif message_type == MessageType.SEND_WORKSPACE_ACK:
+        pass
+    else:
+        raise Exception("Unhandled message type {}".format(message_type))
 
     _com_hub.on_message(message_type, message)
 
@@ -250,15 +313,17 @@ async def on_ready():
 
     _com_channel = channel_com
 
-    logging.info("Connecting to bot network")
+    logging.info("Connecting to bot network...")
     await com(-1, MessageType.CONNECT, str(VERSION))
     try:
-        response = await _com_hub.wait(MessageType.CONNECT_ACK, 5)
+        await _com_hub.wait(MessageType.CONNECT_ACK, 5)
+        await _com_hub.wait(MessageType.SEND_DB, 5)
+        await _com_hub.wait(MessageType.SEND_WORKSPACE, 5)
     except asyncio.TimeoutError:
         logging.info("No connect acks after timeout, assuming control")
         await self_promote()
 
-    logging.info("Connected to bot network")
+    logging.info("Connected and synchronized to bot network")
     _initialized = True
 
 @_client.event
