@@ -141,42 +141,42 @@ async def self_promote():
     await com(-1, MessageType.LET_MASTER)
     logging.info("I'm in charge!")
 
-def get_function_string(func, *args, **kwargs):
+def get_function_hash_string(func, *args, **kwargs):
     # https://stackoverflow.com/questions/10220599/how-to-hash-args-kwargs-for-function-cache
     kwd_mark = object()
     arg_hash = hash(args + (kwd_mark,) + tuple(sorted(kwargs.items())))
-    return func.__name__ + "." + str(len(args)) + "." + str(len(kwargs)) + "." + str(arg_hash)
+    return func.__name__ + "." + str(len(args)) + "." + str(len(kwargs)) + "." + hex(arg_hash)
 
 async def ensure_display(func, *args, **kwargs):
-    func_str = get_function_string(func, *args, **kwargs)
+    func_hash_str = get_function_hash_string(func, *args, **kwargs)
     if _im_master:
         result = await func(*args, **kwargs)
         if result is not None:
             if isinstance(result, float):
-                func_str += ":f" + str(result)
+                func_hash_str += ":f" + str(result)
             elif isinstance(result, int):
-                func_str += ":i" + str(result)
+                func_hash_str += ":i" + str(result)
             elif isinstance(result, str):
-                func_str += ":s" + str(result)
+                func_hash_str += ":s" + str(result)
             else:
                 raise ValueError("Unhandled return type {}".format(type(result)))
 
-        await com(-1, MessageType.ENSURE_DISPLAY, func_str)
+        await com(-1, MessageType.ENSURE_DISPLAY, func_hash_str)
         return result
     else:
+        response = None
         try:
-            logging.info("Waiting for master to run {}".format(func_str))
+            logging.info("Waiting for master to run {}".format(func_hash_str))
             response = await _com_hub.wait(MessageType.ENSURE_DISPLAY, 5)
         except asyncio.TimeoutError:
-            logging.info("No ensure display from master :(")
-            raise Exception # TODO either assume master, or do something
+            logging.info("Timeout on ensure display from master")
 
         for message in response:
             message_split = message.split(":")
             if len(message_split) != 2:
                 raise Exception # TODO eh
 
-            if message_split[0] == func_str:
+            if message_split[0] == func_hash_str:
                 return_type = message_split[1][0]
                 return_value = message_split[1][1:]
                 if return_type == "f":
@@ -187,6 +187,8 @@ async def ensure_display(func, *args, **kwargs):
                     return return_value
                 else:
                     raise ValueError("Unhandled return type {}".format(return_type))
+
+        raise Exception # TODO master is dead I guess :(
 
 @_client.command()
 async def test(ctx):
