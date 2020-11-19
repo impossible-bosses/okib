@@ -8,21 +8,18 @@ import functools
 import git
 import logging
 import os
-import requests
 import sqlite3
 import sys
-import time
 import traceback
 
 # @archi: I removed explicit param loading for now, but we can bring it back if you want
 import params
 
 # CONSTANTS
+VERSION = 20
 ROOT_DIR = os.path.dirname(os.path.realpath(__file__))
 DB_FILE_PATH = os.path.join(ROOT_DIR, "IBCE.db")
 DB_ARCHIVE_PATH = os.path.join(ROOT_DIR, "archive", "IBCE.db")
-
-VERSION = 20
 
 # discord connection
 _client = discord.ext.commands.Bot(command_prefix="+")
@@ -30,225 +27,19 @@ _guild = None
 _pub_channel = None
 
 # communication
-COM_CHANNEL = None
-imMaster = False
-ALIVE_INSTANCES = []
-master_instance = None
-callback = None
-testvariable = None
+_initialized = False
+_kv_entries = []
+_com_channel = None
+_im_master = False
+_alive_instances = set()
+_master_instance = None
+# _callback = None
 
 # DB
-conn = sqlite3.connect(DB_FILE_PATH)
-cursor = conn.cursor()
+_db_conn = sqlite3.connect(DB_FILE_PATH)
+_db_cursor = _db_conn.cursor()
 
-# lobbies
-_lobbies_task = None
-_open_lobbies = set()
-_wc3stats_down_message = None
-
-class MapVersion:
-    def __init__(self, file_name, ent_only = False, deprecated = False, counterfeit = False):
-        self.file_name = file_name
-        self.ent_only = ent_only
-        self.deprecated = deprecated
-        self.counterfeit = counterfeit
-
-KNOWN_VERSIONS = [
-    MapVersion("Impossible.Bosses.v1.10.5.w3x"),
-    MapVersion("Impossible.Bosses.v1.10.5-ent.w3x", ent_only=True),
-    MapVersion("Impossible.Bosses.v1.10.4-ent.w3x", ent_only=True, deprecated=True),
-    MapVersion("Impossible.Bosses.v1.10.3-ent.w3x", ent_only=True, deprecated=True),
-    MapVersion("Impossible.Bosses.v1.10.2-ent.w3x", ent_only=True, deprecated=True),
-    MapVersion("Impossible.Bosses.v1.10.1-ent.w3x", ent_only=True, deprecated=True),
-
-    MapVersion("Impossible_BossesReforgedV1.09Test.w3x", deprecated=True),
-    MapVersion("ImpossibleBossesEnt1.09.w3x", ent_only=True, deprecated=True),
-    MapVersion("Impossible_BossesReforgedV1.09_UFWContinues.w3x", counterfeit=True),
-    MapVersion("Impossible_BossesReforgedV1.09UFW30.w3x", counterfeit=True),
-    MapVersion("Impossible_BossesReforgedV1.08Test.w3x", deprecated=True),
-    MapVersion("Impossible_BossesReforgedV1.07Test.w3x", deprecated=True),
-    MapVersion("Impossible_BossesTestversion1.06.w3x", deprecated=True),
-    MapVersion("Impossible_BossesReforgedV1.05.w3x", deprecated=True),
-    MapVersion("Impossible_BossesReforgedV1.02.w3x", deprecated=True),
-
-    MapVersion("Impossible Bosses BetaV3V.w3x", deprecated=True),
-    MapVersion("Impossible Bosses BetaV3R.w3x", deprecated=True),
-    MapVersion("Impossible Bosses BetaV3P.w3x", deprecated=True),
-    MapVersion("Impossible Bosses BetaV3E.w3x", deprecated=True),
-    MapVersion("Impossible Bosses BetaV3C.w3x", deprecated=True),
-    MapVersion("Impossible Bosses BetaV3A.w3x", deprecated=True),
-    MapVersion("Impossible Bosses BetaV2X.w3x", deprecated=True),
-    MapVersion("Impossible Bosses BetaV2W.w3x", deprecated=True),
-    MapVersion("Impossible Bosses BetaV2S.w3x", deprecated=True),
-    MapVersion("Impossible Bosses BetaV2J.w3x", deprecated=True),
-    MapVersion("Impossible Bosses BetaV2F.w3x", deprecated=True),
-    MapVersion("Impossible Bosses BetaV2E.w3x", deprecated=True),
-    MapVersion("Impossible Bosses BetaV2D.w3x", deprecated=True),
-    MapVersion("Impossible Bosses BetaV2C.w3x", deprecated=True),
-    MapVersion("Impossible Bosses BetaV2A.w3x", deprecated=True),
-    MapVersion("Impossible Bosses BetaV1Y.w3x", deprecated=True),
-    MapVersion("Impossible Bosses BetaV1X.w3x", deprecated=True),
-    MapVersion("Impossible Bosses BetaV1W.w3x", deprecated=True),
-    MapVersion("Impossible Bosses BetaV1V.w3x", deprecated=True),
-    MapVersion("Impossible Bosses BetaV1R.w3x", deprecated=True),
-    MapVersion("Impossible Bosses BetaV1P.w3x", deprecated=True),
-    MapVersion("Impossible Bosses BetaV1C.w3x", deprecated=True),
-]
-
-def get_map_version(map_file):
-    for version in KNOWN_VERSIONS:
-        if map_file == version.file_name:
-            return version
-
-    return None
-
-class Lobby:
-    def __init__(self, lobby_dict):
-        self.id = lobby_dict["id"]
-        self.name = lobby_dict["name"]
-        self.server = lobby_dict["server"]
-        self.map = lobby_dict["map"]
-        self.host = lobby_dict["host"]
-        self.slots_taken = lobby_dict["slotsTaken"]
-        self.slots_total = lobby_dict["slotsTotal"]
-        self.created = lobby_dict["created"]
-        self.last_updated = lobby_dict["lastUpdated"]
-        self.message_id = None
-
-    def __eq__(self, other):
-        return self.id == other.id
-
-    def __hash__(self):
-        return self.id
-
-    def __str__(self):
-        return "[id={} name=\"{}\" server={} map=\"{}\" host={} slots={}/{}]".format(
-            self.id, self.name, self.server, self.map, self.host, self.slots_taken, self.slots_total
-        )
-
-    def to_discord_message_info(self, open = True):
-        COLOR_OPEN = discord.Colour.from_rgb(0, 255, 0)
-        COLOR_CLOSED = discord.Colour.from_rgb(255, 0, 0)
-
-        if self.map[-4:] != ".w3x":
-            raise Exception("Bad map file: {}".format(self.map))
-        if self.slots_total != 9 and self.slots_total != 12:
-            raise Exception("Expected 9 or 12 total players, not {}, for map file {}".format(self.slots_total, self.map))
-
-        version = get_map_version(self.map)
-        mark = ""
-        message = ""
-        if version == None:
-            mark = ":question:"
-            message = ":warning: *WARNING: Unknown map version* :warning:"
-        elif version.counterfeit:
-            mark = ":x:"
-            message = ":warning: *WARNING: Counterfeit version* :warning:"
-        elif version.ent_only:
-            mark = ":x:"
-            message = ":warning: *WARNING: Incompatible version* :warning:"
-        elif version.deprecated:
-            mark = ":x:"
-            message = ":warning: *WARNING: Old map version* :warning:"
-
-        description = "" if open else "*started/unhosted*"
-        color = COLOR_OPEN if open else COLOR_CLOSED
-        embed_title = self.map[:-4] + "  " + mark
-
-        embed = discord.Embed(title=embed_title, description=description, color=color)
-        embed.add_field(name="Lobby Name", value=self.name, inline=False)
-        embed.add_field(name="Host", value=self.host, inline=True)
-        embed.add_field(name="Region", value=self.server, inline=True)
-        players_str = "{} / {}".format(self.slots_taken - 1, self.slots_total - 1)
-        embed.add_field(name="Players", value=players_str, inline=True)
-
-        return {
-            "message": message,
-            "embed": embed,
-        }
-
-def is_ib_lobby(lobby):
-    # return lobby.map.find("Uther Party") != -1 # test
-    return lobby.map.find("Impossible") != -1 and lobby.map.find("Bosses") != -1
-
-def get_ib_lobbies():
-    response = requests.get("https://api.wc3stats.com/gamelist")
-    games = response.json()["body"]
-    if not isinstance(games, list):
-        raise Exception("Property 'games' in HTTP response is not a list, {}".format(type(games)))
-
-    lobbies = [Lobby(game) for game in games]
-    return set([lobby for lobby in lobbies if is_ib_lobby(lobby)])
-
-async def report_ib_lobbies(channel):
-    global _open_lobbies, _wc3stats_down_message
-
-    try:
-        lobbies = get_ib_lobbies()
-    except Exception as e:
-        logging.error("Error getting IB lobbies")
-        traceback.print_exc()
-
-        if _wc3stats_down_message is None:
-            _wc3stats_down_message = await channel.send(content=":warning: WARNING: https://wc3stats.com/gamelist API down, no lobby list :warning:")
-        return
-
-    if _wc3stats_down_message is not None:
-        try:
-            await _wc3stats_down_message.delete()
-        except Exception as e:
-            pass
-        _wc3stats_down_message = None
-
-    new_open_lobbies = set()
-    for lobby in _open_lobbies:
-        try:
-            message = await channel.fetch_message(lobby.message_id)
-        except Exception as e:
-            logging.error("Error fetching message with ID {}".format(lobby.message_id))
-            traceback.print_exc()
-            continue
-
-        still_open = lobby in lobbies
-        lobby_latest = lobby
-        if still_open:
-            for lobby2 in lobbies:
-                if lobby2 == lobby:
-                    lobby_latest = lobby2
-                    lobby_latest.message_id = lobby.message_id
-                    break
-            new_open_lobbies.add(lobby_latest)
-
-        try:
-            message_info = lobby_latest.to_discord_message_info(still_open)
-            if message_info is None:
-                logging.info("Lobby skipped: {}".format(lobby_latest))
-                continue
-            logging.info("Lobby updated (open={}): {}".format(still_open, lobby_latest))
-            await message.edit(embed=message_info["embed"])
-        except Exception as e:
-            logging.error("Failed to edit message for lobby \"{}\"".format(lobby_latest.name))
-            traceback.print_exc()
-
-    _open_lobbies = new_open_lobbies
-
-    for lobby in lobbies:
-        if lobby not in _open_lobbies:
-            try:
-                message_info = lobby.to_discord_message_info()
-                if message_info is None:
-                    logging.info("Lobby skipped: {}".format(lobby))
-                    continue
-                logging.info("Lobby created: {}".format(lobby))
-                message = await channel.send(content=message_info["message"], embed=message_info["embed"])
-            except Exception as e:
-                logging.error("Failed to send message for lobby \"{}\"".format(lobby.name))
-                traceback.print_exc()
-                continue
-
-            lobby.message_id = message.id
-            _open_lobbies.add(lobby)
-
+"""
 class Timer:
     def __init__(self, timeout, callback):
         self._timeout = timeout
@@ -261,48 +52,189 @@ class Timer:
 
     def cancel(self):
         self._task.cancel()
+"""
 
+class MessageType(Enum):
+    CONNECT = "connect"
+    CONNECT_ACK = "connectack"
+    LET_MASTER = "letmaster"
+    ENSURE_DISPLAY = "ensure"
+
+class MessageWaitQueue:
+    def __init__(self):
+        self._waiting = False
+        self._event = asyncio.Event()
+        self._messages = []
+
+    async def wait(self, timeout):
+        if self._waiting:
+            raise Exception("Already waiting")
+
+        assert len(self._messages) == 0
+
+        self._waiting = True
+        did_timeout = False
+        try:
+            await asyncio.wait_for(self._event.wait(), timeout=timeout)
+        except asyncio.TimeoutError:
+            raise asyncio.TimeoutError
+        finally:
+            self._waiting = False
+        
+        self._event.clear()
+        messages = list(self._messages)
+        self._messages = []
+        return messages
+
+class MessageHub:
+    def __init__(self):
+        self._wait_queues = {}
+        for message_type in MessageType:
+            self._wait_queues[message_type] = MessageWaitQueue()
+
+    def on_message(self, message_type, message):
+        assert isinstance(message_type, MessageType)
+        assert isinstance(message, str)
+        assert message_type in self._wait_queues
+
+        self._wait_queues[message_type]._messages.append(message)
+        self._wait_queues[message_type]._event.set()
+
+    async def wait(self, message_type, timeout):
+        return await self._wait_queues[message_type].wait(timeout)
+
+_com_hub = MessageHub()
+
+async def com(to_id, message_type, message = ""):
+    assert isinstance(to_id, int)
+    assert isinstance(message_type, MessageType)
+    assert isinstance(message, str)
+
+    await _com_channel.send("/".join([
+        str(params.BOT_ID),
+        str(to_id),
+        message_type.value,
+        message
+    ]))
+
+async def parse_bot_com(from_id, message_type, message, attachment):
+    global _im_master, _alive_instances, _master_instance
+
+    if message_type == MessageType.CONNECT:
+        if _im_master:
+            await com(from_id, MessageType.CONNECT_ACK, str(VERSION) + "+")
+            # TODO send DB
+        else:
+            await com(from_id, MessageType.CONNECT_ACK, str(VERSION))
+
+        version = int(message)
+        if version == VERSION:
+            _alive_instances.add(from_id)
+            # TODO maybe explicitly wait for acks from other instances, too?
+        else:
+            pass # TODO version mismatch
+    elif message_type == MessageType.CONNECTACK:
+        message_trim = message
+        if message[-1] == "+":
+            _master_instance = from_id
+            message_trim = message[:-1]
+        version = int(message_trim)
+    elif message_type == MessageType.LET_MASTER:
+        if _im_master:
+            logging.warn("I was unworthy :(")
+            _im_master = False
+
+        _master_instance = from_id
+    elif message_type == MessageType.ENSURE_DISPLAY:
+        pass
+
+    _com_hub.on_message(message_type, message)
+
+"""
 async def com(to_id, key, value = ""):
-    await COM_CHANNEL.send(str(params.BOT_ID) + "/" + str(to_id) + "/" + key + "&" + value)
+    await _com_channel.send(str(params.BOT_ID) + "/" + str(to_id) + "/" + key + "&" + value)
+"""
 
-async def self_promote(case = None):
-    global imMaster
-    global master_instance
-    global ALIVE_INSTANCES
-    
-    imMaster = True
-    await com("ALL","letmaster")
-    master_instance = params.BOT_ID
-    if case == "forced":
-        ALIVE_INSTANCES.append(params.BOT_ID)
+async def self_promote():
+    global _im_master, _master_instance
+
+    _im_master = True
+    await com(-1, MessageType.LET_MASTER)
+    #await com("ALL", "letmaster")
+    _master_instance = params.BOT_ID
     logging.info("I'm in charge!")
 
-async def ensureDisplay(fun, tobereturned = None):
-    global callback
-    if imMaster:
+"""
+async def self_promote(case=None):
+    global _im_master, _master_instance, _alive_instances
+    
+    _im_master = True
+    await com("ALL", "letmaster")
+    _master_instance = params.BOT_ID
+    if case == "forced":
+        _alive_instances.append(params.BOT_ID)
+    logging.info("I'm in charge!")
+"""
+
+async def wait_for_master_exec(func):
+    return (True, None)
+
+async def ensure_display(func, *args, **kwargs):
+    print(_im_master)
+
+    func_str = func.__name__ + "." + str(len(args)) + "." + str(len(kwargs))
+    if _im_master:
+        result = await func(*args, **kwargs)
+        print(result)
+
+        if result is not None:
+            if isinstance(result, float):
+                func_str += ".f" + str(result)
+            if isinstance(result, int):
+                func_str += ".i" + str(result)
+            if isinstance(result, str):
+                func_str += ".s" + str(result)
+
+        await com(-1, MessageType.ENSURE_DISPLAY, func_str)
+        return result
+    else:
+        while True:
+            try:
+                result = await wait_for_master_exec(func, *args, **kwargs)
+            except Exception as e:
+                # TODO get master
+                pass
+
+            if result[0]:
+                return result[1]
+
+"""
+async def ensureDisplay(fun, tobereturned=None):
+    global _callback
+
+    if _im_master:
         if tobereturned != None:
             globals()[tobereturned] = await fun()
-            await com("ALL", "rb", str(tobereturned) + "&" + str(testvariable))
+            await com("ALL", "rb", str(tobereturned) + "&" + str(""))#testvariable))
         else:
             await fun()
             await com("ALL", "rb", "&")
     else:
         bakup = functools.partial(backupMaster, fun, tobereturned)
-        callback = Timer(2, bakup)
+        _callback = Timer(2, bakup)
 
 async def backupMaster(fun, tobereturned):
-    global ALIVE_INSTANCES
-    global master_instance
-    global callback
-    logging.info(ALIVE_INSTANCES)
-    logging.info(master_instance)
+    global _master_instance, _alive_instances, _callback
+
+    logging.info(_alive_instances)
+    logging.info(_master_instance)
     
-    if master_instance == None:
-        ALIVE_INSTANCES.remove(max(ALIVE_INSTANCES))
+    if _master_instance == None:
+        _alive_instances.remove(max(_alive_instances))
     else:
-        ALIVE_INSTANCES.remove(master_instance)
-        master_instance = None
-    if max(ALIVE_INSTANCES) == params.BOT_ID:
+        _alive_instances.remove(_master_instance)
+        _master_instance = None
+    if max(_alive_instances) == params.BOT_ID:
         await self_promote()
         if tobereturned is not None:
             globals()[tobereturned] = await fun()
@@ -310,20 +242,20 @@ async def backupMaster(fun, tobereturned):
             await fun()
     else:
         bakup = functools.partial(backupMaster, fun, tobereturned)
-        callback = Timer(2, bakup)
+        _callback = Timer(2, bakup)
 
 async def updateDB(att):
-    global conn
-    global cursor
+    global _db_conn, _db_conn
+
     archiveDB()
     await att.save(fp=att.filename)
-    conn = sqlite3.connect(DB_FILE_PATH)
-    cursor = conn.cursor()
+    _db_conn = sqlite3.connect(DB_FILE_PATH)
+    _db_cursor = _db_conn.cursor()
     #last_db_entry_startup = getlastdb_entry()
     await com("ALL", "is_syncronized", "")
 
 def archiveDB():
-    conn.close()
+    _db_conn.close()
     try:
         os.mkdir(os.path.dirname(DB_ARCHIVE_PATH))
     except FileExistsError:
@@ -332,20 +264,17 @@ def archiveDB():
 
 async def sendDB(to_id):
     with open(DB_FILE_PATH, "rb") as f:
-        await COM_CHANNEL.send(str(params.BOT_ID) + "/" + str(to_id) + "/DB&", file=discord.File(f.name))
+        await _com_channel.send(str(params.BOT_ID) + "/" + str(to_id) + "/DB&", file=discord.File(f.name))
 
 async def parseBotCom(from_id, botcom, att = None):
-    global imMaster
-    global ALIVE_INSTANCES
-    global master_instance
-    global callback
+    global _im_master, _alive_instances, _master_instance, _callback
  
     tag = botcom.split("&")[0]
     param1 = botcom.split("&")[1]
     if tag == "connect":
         #param1 = sender version number
         if int(param1) == VERSION:
-            if imMaster:
+            if _im_master:
                 await com(from_id, "v", str(VERSION) + "&yes")
                 #this is master job to send database and workspace to synchronise newcomer
                 await sendDB(from_id)
@@ -365,36 +294,37 @@ async def parseBotCom(from_id, botcom, att = None):
 #         else:
 #             bot_master = False
 #             await giveMaster()
-    if tag == "rb" :
+    if tag == "rb":
         #stop monitoring display integrity
-        callback.cancel()
+        _callback.cancel()
         #we might have some value to affect that can only be done by the master
         param2 = botcom.split('&')[2]
         if param1 != "":
             globals()[param1] = param2
-        if from_id != master_instance :
+        if from_id != _master_instance :
             #some bot has backed up the fallen master
             #consider the previous master down
-            ALIVE_INSTANCES.remove(master_instance)
-            master_instance = from_id
+            _alive_instances.remove(_master_instance)
+            _master_instance = from_id
             logging.info("master is now " + str(from_id))           
     if tag == "v":
         #alive callback from other bots
         #needed so every instance knows who's master and increments ALIVE_INSTANCE
         isMaster = botcom.split("&")[2]
         if isMaster == "yes":     
-            master_instance = from_id
-            callback.cancel()    
-        ALIVE_INSTANCES.append(from_id)   
+            _master_instance = from_id
+            _callback.cancel()    
+        _alive_instances.append(from_id)   
     if tag == "pythonFile":
         await updatePython(att)
     if tag == "updateMe":
         await sendPython()
     if tag == "DB":
-        ALIVE_INSTANCES.append(params.BOT_ID)
+        _alive_instances.append(params.BOT_ID)
         await updateDB(att)
     if tag == "is_syncronized":
         pass
+"""
 
 @_client.command()
 async def test(ctx):
@@ -417,8 +347,7 @@ async def update(ctx, key):
 
 @_client.event
 async def on_ready():
-    global COM_CHANNEL
-    global callback
+    global _guild, _pub_channel, _initialized, _com_channel, _im_master, _master_instance#, _callback
 
     guild_ib = None
     guild_com = None
@@ -451,41 +380,57 @@ async def on_ready():
     _pub_channel = channel_pub
     logging.info("Bot \"{}\" connected to Discord on guild \"{}\", pub channel \"{}\"".format(_client.user, guild_ib.name, channel_pub.name))
 
-    COM_CHANNEL = channel_com
-    await com("ALL", "connect", str(VERSION))
-    callback = Timer(3, functools.partial(self_promote, "forces"))
+    _com_channel = channel_com
+
+    logging.info("Connecting to bot network")
+    await com(-1, MessageType.CONNECT, str(VERSION))
+    try:
+        response = await _com_hub.wait(MessageType.CONNECT, 5)
+    except asyncio.TimeoutError:
+        logging.info("No connect acks after timeout, I'm in charge now")
+        _im_master = True
+        _master_instance = params.BOT_ID
+
+    logging.info("Connected to bot network")
+    _initialized = True
 
 @_client.event
 async def on_message(message):
-    if message.author.id == 698490662143655967 and message.channel == COM_CHANNEL:
-        #from this bot
-        FROM_id = int(message.content.split("/")[0])
-        TO = message.content.split("/")[1]
-        real_content = message.content.split("/")[2]
+    if message.author.id == _client.user.id and message.channel == _com_channel:
+        # from this bot user
+        message_split = message.content.split("/")
+        if len(message_split) != 4:
+            logging.error("Invalid bot com: {}".format(message.content))
+            return
 
-        if FROM_id != params.BOT_ID and (TO == "ALL" or TO == str(params.BOT_ID)):
-            #from another bot
-            logging.info("communication received from : " + str(FROM_id) + " to " + TO + " content = " + real_content)
-            if not message.attachments:
-                await parseBotCom(FROM_id,real_content)
-            else :
-                await parseBotCom(FROM_id,real_content,message.attachments[0])
+        from_id = int(message_split[0])
+        to_id = int(message_split[1])
+        message_type = MessageType(message_split[2])
+        message = message_split[3]
+        if from_id != params.BOT_ID and (to_id == -1 or to_id == params.BOT_ID):
+            # from another bot instance
+            logging.info("Communication received from {} to {}, message type {}, content = {}".format(from_id, to_id, message_type, message))
+
+            attachment = None
+            if message.attachments:
+                attachment = message.attachments[0]
+            await parse_bot_com(from_id, message_type, message, attachment)
     else:
         await _client.process_commands(message)
 
 @loop(seconds=5)
 async def refresh_ib_lobbies():
-    logging.info("Refreshing lobby list")
-    if _pub_channel is not None:
-        try:
-            await report_ib_lobbies(_pub_channel)
-        except Exception as e:
-            logging.error("Exception in report_ib_lobbies")
-            traceback.print_exc()
+    from lobbies import report_ib_lobbies
 
-@refresh_ib_lobbies.before_loop
-async def refresh_ib_lobbies_before():
-    await _client.wait_until_ready()
+    if not _initialized:
+        return False
+
+    logging.info("Refreshing lobby list")
+    try:
+        await report_ib_lobbies(_pub_channel)
+    except Exception as e:
+        logging.error("Exception in report_ib_lobbies")
+        traceback.print_exc()
 
 if __name__ == "__main__":
     logs_dir = os.path.join(ROOT_DIR, "logs")
