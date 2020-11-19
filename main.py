@@ -16,11 +16,27 @@ import traceback
 
 import params
 
-# CONSTANTS
-VERSION = 20
 ROOT_DIR = os.path.dirname(os.path.realpath(__file__))
 DB_FILE_PATH = os.path.join(ROOT_DIR, "IBCE.db")
 DB_ARCHIVE_PATH = os.path.join(ROOT_DIR, "archive", "IBCE.db")
+
+def get_source_version():
+    repo = git.Repo(ROOT_DIR)
+    head_commit_sha = repo.head.commit.binsha
+    all_commits = repo.iter_commits()
+    total = 0
+    index = -1
+    for commit in all_commits:
+        if commit.binsha == head_commit_sha:
+            index = total
+        total += 1
+
+    if index == -1:
+        raise Exception("HEAD commit sha not found: {}".format(repo.head.commit.hexsha))
+    return total - index
+
+VERSION = get_source_version()
+print("Source version {}".format(VERSION))
 
 # discord connection
 _client = discord.ext.commands.Bot(command_prefix="+")
@@ -163,9 +179,11 @@ async def parse_bot_com(from_id, message_type, message, attachment):
         version = int(message)
         if version == VERSION:
             _alive_instances.add(from_id)
-            # TODO maybe explicitly wait for acks from other instances, too?
+            # maybe explicitly wait for acks from other instances, too? naaah
+        elif version > VERSION:
+            pass # TODO new version, update
         else:
-            pass # TODO version mismatch
+            pass # TODO outdated version
     elif message_type == MessageType.CONNECT_ACK:
         message_trim = message
         if message[-1] == "+":
@@ -264,7 +282,7 @@ async def ensure_display(timeout, func, *args, **kwargs):
 
         # Don't wanna re-run this if the master failure has already been handled
         if not _im_master:
-            # TODO this probably doesn't work for more than 2 instances
+            # TODO this doesn't work for more than 2 instances. need to coordinate the promotion
             await self_promote()
             return await ensure_display(timeout, func, *args, **kwargs)
 
@@ -620,135 +638,3 @@ if __name__ == "__main__":
 
     refresh_ib_lobbies.start()
     _client.run(params.BOT_TOKEN)
-
-
-"""
-class Timer:
-    def __init__(self, timeout, callback):
-        self._timeout = timeout
-        self._callback = callback
-        self._task = asyncio.ensure_future(self._job())
-        
-    async def _job(self):
-        await asyncio.sleep(self._timeout)
-        await self._callback()
-
-    def cancel(self):
-        self._task.cancel()
-
-async def ensureDisplay(fun, tobereturned=None):
-    global _callback
-
-    if _im_master:
-        if tobereturned != None:
-            globals()[tobereturned] = await fun()
-            await com("ALL", "rb", str(tobereturned) + "&" + str(""))#testvariable))
-        else:
-            await fun()
-            await com("ALL", "rb", "&")
-    else:
-        bakup = functools.partial(backupMaster, fun, tobereturned)
-        _callback = Timer(2, bakup)
-
-async def backupMaster(fun, tobereturned):
-    global _master_instance, _alive_instances, _callback
-
-    logging.info(_alive_instances)
-    logging.info(_master_instance)
-    
-    if _master_instance == None:
-        _alive_instances.remove(max(_alive_instances))
-    else:
-        _alive_instances.remove(_master_instance)
-        _master_instance = None
-    if max(_alive_instances) == params.BOT_ID:
-        await self_promote()
-        if tobereturned is not None:
-            globals()[tobereturned] = await fun()
-        else:
-            await fun()
-    else:
-        bakup = functools.partial(backupMaster, fun, tobereturned)
-        _callback = Timer(2, bakup)
-
-async def updateDB(att):
-    global _db_conn, _db_conn
-
-    archiveDB()
-    await att.save(fp=att.filename)
-    _db_conn = sqlite3.connect(DB_FILE_PATH)
-    _db_cursor = _db_conn.cursor()
-    #last_db_entry_startup = getlastdb_entry()
-    await com("ALL", "is_syncronized", "")
-
-def archiveDB():
-    _db_conn.close()
-    try:
-        os.mkdir(os.path.dirname(DB_ARCHIVE_PATH))
-    except FileExistsError:
-        pass
-    os.replace(DB_FILE_PATH, DB_ARCHIVE_PATH)
-
-async def sendDB(to_id):
-    with open(DB_FILE_PATH, "rb") as f:
-        await _com_channel.send(str(params.BOT_ID) + "/" + str(to_id) + "/DB&", file=discord.File(f.name))
-
-async def parseBotCom(from_id, botcom, att = None):
-    global _im_master, _alive_instances, _master_instance, _callback
- 
-    tag = botcom.split("&")[0]
-    param1 = botcom.split("&")[1]
-    if tag == "connect":
-        #param1 = sender version number
-        if int(param1) == VERSION:
-            if _im_master:
-                await com(from_id, "v", str(VERSION) + "&yes")
-                #this is master job to send database and workspace to synchronise newcomer
-                await sendDB(from_id)
-                #TODO
-                #await sendWS(from_id)
-            else:
-                await com(from_id, "v", str(VERSION) + "&no")
-        else:
-            #VERSION MISSMATCH
-            #TODO
-            pass
-            
-#             await requestUpdate()
-#         elif int(param1) < VERSION:
-#             await letMaster()
-#             await sendPython()
-#         else:
-#             bot_master = False
-#             await giveMaster()
-    if tag == "rb":
-        #stop monitoring display integrity
-        _callback.cancel()
-        #we might have some value to affect that can only be done by the master
-        param2 = botcom.split('&')[2]
-        if param1 != "":
-            globals()[param1] = param2
-        if from_id != _master_instance :
-            #some bot has backed up the fallen master
-            #consider the previous master down
-            _alive_instances.remove(_master_instance)
-            _master_instance = from_id
-            logging.info("master is now " + str(from_id))           
-    if tag == "v":
-        #alive callback from other bots
-        #needed so every instance knows who's master and increments ALIVE_INSTANCE
-        isMaster = botcom.split("&")[2]
-        if isMaster == "yes":     
-            _master_instance = from_id
-            _callback.cancel()    
-        _alive_instances.append(from_id)   
-    if tag == "pythonFile":
-        await updatePython(att)
-    if tag == "updateMe":
-        await sendPython()
-    if tag == "DB":
-        _alive_instances.append(params.BOT_ID)
-        await updateDB(att)
-    if tag == "is_syncronized":
-        pass
-"""
