@@ -234,6 +234,7 @@ async def parse_bot_com(from_id, message_type, message, attachment):
 
     _com_hub.on_message(message_type, message)
 
+# Promotes this bot instance to master
 async def self_promote():
     global _im_master, _master_instance
 
@@ -243,7 +244,8 @@ async def self_promote():
     logging.info("I'm in charge!")
 
 def get_function_hash_string(func, *args, **kwargs):
-    # TODO eh, whatever
+    # TODO ideally, this would uniquely identify the given function+args, and give reliably the same value
+    # across instances. Couldn't get it to work yet, so this will have to do for now.
     return func.__name__ + "." + str(len(args)) + "." + str(len(kwargs))
 
 # Wrapper around channel.send that only returns the int message ID
@@ -251,6 +253,9 @@ async def send_message(channel, *args, **kwargs):
     message = await channel.send(*args, **kwargs)
     return message.id
 
+# Ensures execution of the given function + args/kwargs on only 1 bot instance.
+# The given function should have a simple return type (None, float, int, or string).
+# Always awaits to return the result of the given function, in both master and slave instances.
 async def ensure_display(timeout, func, *args, **kwargs):
     func_hash_str = get_function_hash_string(func, *args, **kwargs)
     if _im_master:
@@ -274,7 +279,7 @@ async def ensure_display(timeout, func, *args, **kwargs):
         response = []
         try:
             logging.info("Waiting for master to run {}".format(func_hash_str))
-            response = await _com_hub.wait(MessageType.ENSURE_DISPLAY, 5)
+            response = await _com_hub.wait(MessageType.ENSURE_DISPLAY, timeout)
         except asyncio.TimeoutError:
             logging.warning("Timeout on ensure display from master")
 
@@ -301,7 +306,7 @@ async def ensure_display(timeout, func, *args, **kwargs):
 
         # Don't wanna re-run this if the master failure has already been handled
         if not _im_master:
-            # TODO this doesn't work for more than 2 instances. need to coordinate the promotion
+            # TODO this doesn't work for more than 2 instances, obv. need to coordinate the promotion
             await self_promote()
             return await ensure_display(timeout, func, *args, **kwargs)
 
@@ -357,17 +362,16 @@ async def on_ready():
     logging.info("Connecting to bot network...")
     await com(-1, MessageType.CONNECT, str(VERSION))
 
-    connect_timeout = 10
     try:
-        await _com_hub.wait(MessageType.CONNECT_ACK, connect_timeout)
+        await _com_hub.wait(MessageType.CONNECT_ACK, 5)
     except asyncio.TimeoutError:
         logging.info("No connect acks after timeout, assuming control")
         await self_promote()
 
     if not _im_master:
         try:
-            await _com_hub.wait(MessageType.SEND_DB, connect_timeout)
-            await _com_hub.wait(MessageType.SEND_WORKSPACE, connect_timeout)
+            await _com_hub.wait(MessageType.SEND_DB, 10)
+            await _com_hub.wait(MessageType.SEND_WORKSPACE, 10)
         except asyncio.TimeoutError:
             logging.error("Didn't receive DB and workspace from master")
             # TODO what now?
