@@ -229,7 +229,7 @@ async def ensure_display(timeout, func, *args, **kwargs):
         await com(-1, MessageType.ENSURE_DISPLAY, func_hash_str)
         return result
     else:
-        response = None
+        response = []
         try:
             logging.info("Waiting for master to run {}".format(func_hash_str))
             response = await _com_hub.wait(MessageType.ENSURE_DISPLAY, 5)
@@ -239,7 +239,7 @@ async def ensure_display(timeout, func, *args, **kwargs):
         for message in response:
             message_split = message.split(":")
             if len(message_split) != 2:
-                raise Exception # TODO eh
+                raise Exception("Incorrectly formatted message {}".format(message))
 
             if message_split[0] == func_hash_str:
                 if message_split[1] == "":
@@ -256,7 +256,11 @@ async def ensure_display(timeout, func, *args, **kwargs):
                 else:
                     raise ValueError("Unhandled return type {}".format(return_type))
 
-        raise Exception # TODO master is dead I guess :(
+        # Don't wanna re-run this if the master failure has already been handled
+        if not _im_master:
+            # TODO this probably doesn't work for more than 2 instances
+            await self_promote()
+            return await ensure_display(timeout, func, *args, **kwargs)
 
 @_client.command()
 async def test(ctx):
