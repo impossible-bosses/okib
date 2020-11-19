@@ -173,6 +173,7 @@ def update_source_and_reset():
 
             new_version = get_source_version()
             if new_version > VERSION:
+                # TODO send com to notify others of disconnect
                 if params.REBOOT_ON_UPDATE:
                     logging.info("Rebooting")
                     os.system("sudo shutdown -r now")
