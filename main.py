@@ -581,7 +581,7 @@ async def report_ib_lobbies(channel):
                     logging.info("Lobby skipped: {}".format(lobby))
                     continue
                 logging.info("Lobby created: {}".format(lobby))
-                message_id = await ensure_display(timeout, send_message, channel, message_info["message"], message_info["embed"])
+                message_id = await ensure_display(timeout, send_message, channel, content=message_info["message"], embed=message_info["embed"])
             except Exception as e:
                 logging.error("Failed to send message for lobby \"{}\"".format(lobby.name))
                 traceback.print_exc()
