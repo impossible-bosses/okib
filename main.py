@@ -178,6 +178,9 @@ async def ensure_display(func, *args, **kwargs):
                 raise Exception # TODO eh
 
             if message_split[0] == func_hash_str:
+                if message_split[1] == "":
+                    return None
+
                 return_type = message_split[1][0]
                 return_value = message_split[1][1:]
                 if return_type == "f":
