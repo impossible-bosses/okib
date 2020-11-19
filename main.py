@@ -533,9 +533,9 @@ async def report_ib_lobbies(channel):
 
     new_open_lobbies = set()
     for lobby in _open_lobbies:
-        still_open = lobby in lobbies
         lobby_latest = lobby
-        should_update = False
+        still_open = lobby in lobbies
+        should_update = not still_open
         if still_open:
             for lobby2 in lobbies:
                 if lobby2 == lobby:
