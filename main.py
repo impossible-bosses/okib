@@ -59,13 +59,12 @@ class MessageWaitQueue:
         if self._waiting:
             raise Exception("Already waiting")
 
-        assert len(self._messages) == 0
-
         self._waiting = True
         did_timeout = False
         try:
             await asyncio.wait_for(self._event.wait(), timeout=timeout)
         except asyncio.TimeoutError:
+            assert len(self._messages) == 0
             raise asyncio.TimeoutError
         finally:
             self._waiting = False
