@@ -198,7 +198,6 @@ async def parse_bot_com(from_id, message_type, message, attachment):
         version = int(message)
         if version == VERSION:
             _alive_instances.add(from_id)
-            # maybe explicitly wait for acks from other instances, too? naaah
         elif version > VERSION:
             logging.info("Bot instance {} running newer version {}, updating...".format(from_id, version))
             update_source_and_reset()
@@ -210,6 +209,7 @@ async def parse_bot_com(from_id, message_type, message, attachment):
             _master_instance = from_id
             message_trim = message[:-1]
         version = int(message_trim)
+        _alive_instances.add(from_id)
     elif message_type == MessageType.LET_MASTER:
         if _im_master:
             logging.warning("I was unworthy :(")
@@ -325,7 +325,7 @@ async def update(ctx, key):
 
 @_client.event
 async def on_ready():
-    global _guild, _pub_channel, _com_channel, _initialized
+    global _guild, _pub_channel, _com_channel, _initialized, _alive_instances
 
     guild_ib = None
     guild_com = None
@@ -377,6 +377,7 @@ async def on_ready():
             logging.error("Didn't receive DB and workspace from master")
             # TODO what now?
 
+    _alive_instances.add(params.BOT_ID)
     logging.info("Connected and synchronized to bot network")
     _initialized = True
 
