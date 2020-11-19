@@ -209,7 +209,7 @@ def get_function_hash_string(func, *args, **kwargs):
     # TODO eh, whatever
     return func.__name__ + "." + str(len(args)) + "." + str(len(kwargs))
 
-async def ensure_display(func, *args, **kwargs):
+async def ensure_display(timeout, func, *args, **kwargs):
     func_hash_str = get_function_hash_string(func, *args, **kwargs)
     if _im_master:
         result = await func(*args, **kwargs)
@@ -260,7 +260,7 @@ async def ensure_display(func, *args, **kwargs):
 
 @_client.command()
 async def test(ctx):
-    await ensure_display(ctx.channel.send, "working!")
+    await ensure_display(5, ctx.channel.send, "working!")
 
 @_client.command()
 async def update(ctx, key):
@@ -508,6 +508,8 @@ async def send_message(channel, content, embed):
 async def report_ib_lobbies(channel):
     global _open_lobbies, _wc3stats_down_message_id
 
+    timeout = LOBBY_REFRESH_RATE * 2
+
     try:
         lobbies = get_ib_lobbies()
     except Exception as e:
@@ -515,7 +517,7 @@ async def report_ib_lobbies(channel):
         traceback.print_exc()
 
         if _wc3stats_down_message_id is None:
-            _wc3stats_down_message_id = await ensure_display(send_message, channel, ":warning: WARNING: https://wc3stats.com/gamelist API down, no lobby list :warning:")
+            _wc3stats_down_message_id = await ensure_display(timeout, send_message, channel, ":warning: WARNING: https://wc3stats.com/gamelist API down, no lobby list :warning:")
         return
 
     if _wc3stats_down_message_id is not None:
@@ -527,7 +529,7 @@ async def report_ib_lobbies(channel):
 
         _wc3stats_down_message_id = None
         if message is not None:
-            await ensure_display(message.delete)
+            await ensure_display(timeout, message.delete)
 
     new_open_lobbies = set()
     for lobby in _open_lobbies:
@@ -562,7 +564,7 @@ async def report_ib_lobbies(channel):
                 traceback.print_exc()
                 continue
 
-            await ensure_display(message.edit, embed=message_info["embed"])
+            await ensure_display(timeout, message.edit, embed=message_info["embed"])
 
     _open_lobbies = new_open_lobbies
 
@@ -574,7 +576,7 @@ async def report_ib_lobbies(channel):
                     logging.info("Lobby skipped: {}".format(lobby))
                     continue
                 logging.info("Lobby created: {}".format(lobby))
-                message_id = await ensure_display(send_message, channel, message_info["message"], message_info["embed"])
+                message_id = await ensure_display(timeout, send_message, channel, message_info["message"], message_info["embed"])
             except Exception as e:
                 logging.error("Failed to send message for lobby \"{}\"".format(lobby.name))
                 traceback.print_exc()
