@@ -199,6 +199,7 @@ async def parse_bot_com(from_id, message_type, message, attachment):
             _alive_instances.add(from_id)
             # maybe explicitly wait for acks from other instances, too? naaah
         elif version > VERSION:
+            logging.info("Bot instance {} running newer version {}, updating...".format(from_id, version))
             update_source_and_reset()
         else:
             pass # TODO outdated version
@@ -306,7 +307,7 @@ async def ensure_display(timeout, func, *args, **kwargs):
 
 @_client.command()
 async def ping(ctx):
-    if isinstance(ctx.channel, discord.DMChannel):
+    if isinstance(ctx.channel, discord.channel.DMChannel):
         await ensure_display(send_message, ctx.channel, "pong")
 
 @_client.command()
