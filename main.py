@@ -5,6 +5,7 @@ from discord.ext.tasks import loop
 from discord.ext import commands
 from enum import Enum, auto
 import git
+import io
 import logging
 import os
 import pickle
@@ -128,7 +129,6 @@ async def update_db(db_bytes):
 
     _db_conn = sqlite3.connect(DB_FILE_PATH)
     _db_cursor = _db_conn.cursor()
-    await com("ALL", "is_syncronized", "")
 
 async def send_db(to_id):
     with open(DB_FILE_PATH, "rb") as f:
@@ -146,7 +146,7 @@ async def send_workspace(to_id):
         "open_lobbies": _open_lobbies,
         "wc3stats_down_message": _wc3stats_down_message
     }
-    workspace_bytes = pickle.dumps(workspace_obj)
+    workspace_bytes = io.BytesIO(pickle.dumps(workspace_obj))
     await com(to_id, MessageType.SEND_WORKSPACE, "", discord.File(workspace_bytes))
 
 async def parse_bot_com(from_id, message_type, message, attachment):
@@ -182,13 +182,15 @@ async def parse_bot_com(from_id, message_type, message, attachment):
     elif message_type == MessageType.ENSURE_DISPLAY:
         pass
     elif message_type == MessageType.SEND_DB:
-        db_bytes = attachment.read()
+        db_bytes = await attachment.read()
         await update_db(db_bytes)
+        await com(from_id, MessageType.SEND_DB_ACK)
     elif message_type == MessageType.SEND_DB_ACK:
         pass
     elif message_type == MessageType.SEND_WORKSPACE:
         workspace_bytes = attachment.read()
         update_workspace(workspace_bytes)
+        await com(from_id, MessageType.SEND_WORKSPACE_ACK)
     elif message_type == MessageType.SEND_WORKSPACE_ACK:
         pass
     else:
