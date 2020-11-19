@@ -209,6 +209,10 @@ def get_function_hash_string(func, *args, **kwargs):
     # TODO eh, whatever
     return func.__name__ + "." + str(len(args)) + "." + str(len(kwargs))
 
+async def send_message(channel, content, embed):
+    message = await channel.send(content=content, embed=embed)
+    return message.id
+
 async def ensure_display(timeout, func, *args, **kwargs):
     func_hash_str = get_function_hash_string(func, *args, **kwargs)
     if _im_master:
@@ -264,7 +268,7 @@ async def ensure_display(timeout, func, *args, **kwargs):
 
 @_client.command()
 async def test(ctx):
-    await ensure_display(5, ctx.channel.send, "working!")
+    await ensure_display(5, send_message, ctx.channel, "working!")
 
 @_client.command()
 async def update(ctx, key):
@@ -504,10 +508,6 @@ def get_ib_lobbies():
     logging.info("{} total lobbies, {} IB lobbies".format(len(lobbies), len(ib_lobbies)))
 
     return ib_lobbies
-
-async def send_message(channel, content, embed):
-    message = await channel.send(content=content, embed=embed)
-    return message.id
 
 async def report_ib_lobbies(channel):
     global _open_lobbies, _wc3stats_down_message_id
