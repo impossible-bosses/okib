@@ -344,11 +344,16 @@ async def on_ready():
     connect_timeout = 10
     try:
         await _com_hub.wait(MessageType.CONNECT_ACK, connect_timeout)
-        await _com_hub.wait(MessageType.SEND_DB, connect_timeout)
-        await _com_hub.wait(MessageType.SEND_WORKSPACE, connect_timeout)
     except asyncio.TimeoutError:
         logging.info("No connect acks after timeout, assuming control")
         await self_promote()
+
+    try:
+        await _com_hub.wait(MessageType.SEND_DB, connect_timeout)
+        await _com_hub.wait(MessageType.SEND_WORKSPACE, connect_timeout)
+    except asyncio.TimeoutError:
+        logging.error("Didn't receive DB and workspace from master")
+        # TODO what now?
 
     logging.info("Connected and synchronized to bot network")
     _initialized = True
