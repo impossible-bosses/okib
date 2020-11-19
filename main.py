@@ -105,6 +105,14 @@ class MessageHub:
 
 _com_hub = MessageHub()
 
+async def self_promote():
+    global _im_master, _master_instance
+
+    _im_master = True
+    _master_instance = params.BOT_ID
+    await com(-1, MessageType.LET_MASTER)
+    logging.info("I'm in charge!")
+
 async def com(to_id, message_type, message = ""):
     assert isinstance(to_id, int)
     assert isinstance(message_type, MessageType)
@@ -134,7 +142,7 @@ async def parse_bot_com(from_id, message_type, message, attachment):
             # TODO maybe explicitly wait for acks from other instances, too?
         else:
             pass # TODO version mismatch
-    elif message_type == MessageType.CONNECTACK:
+    elif message_type == MessageType.CONNECT_ACK:
         message_trim = message
         if message[-1] == "+":
             _master_instance = from_id
@@ -150,32 +158,6 @@ async def parse_bot_com(from_id, message_type, message, attachment):
         pass
 
     _com_hub.on_message(message_type, message)
-
-"""
-async def com(to_id, key, value = ""):
-    await _com_channel.send(str(params.BOT_ID) + "/" + str(to_id) + "/" + key + "&" + value)
-"""
-
-async def self_promote():
-    global _im_master, _master_instance
-
-    _im_master = True
-    await com(-1, MessageType.LET_MASTER)
-    #await com("ALL", "letmaster")
-    _master_instance = params.BOT_ID
-    logging.info("I'm in charge!")
-
-"""
-async def self_promote(case=None):
-    global _im_master, _master_instance, _alive_instances
-    
-    _im_master = True
-    await com("ALL", "letmaster")
-    _master_instance = params.BOT_ID
-    if case == "forced":
-        _alive_instances.append(params.BOT_ID)
-    logging.info("I'm in charge!")
-"""
 
 async def wait_for_master_exec(func):
     return (True, None)
@@ -388,9 +370,8 @@ async def on_ready():
     try:
         response = await _com_hub.wait(MessageType.CONNECT, 5)
     except asyncio.TimeoutError:
-        logging.info("No connect acks after timeout, I'm in charge now")
-        _im_master = True
-        _master_instance = params.BOT_ID
+        logging.info("No connect acks after timeout, assuming control")
+        await self_promote()
 
     logging.info("Connected to bot network")
     _initialized = True
