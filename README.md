@@ -9,9 +9,12 @@ BOT_TOKEN = "<your_discord_bot_token>"
 GUILD_NAME = "IB CAFETERIA"
 PUB_CHANNEL_NAME = "pub-games"
 
-COM_GUILD_ID = 777727718498949234   # ID of virtual/comm guild
-COM_CHANNEL_ID = 773743473434857565 # ID of virtual/comm channel in guild
+# IDs for bot com guild and channel
+COM_GUILD_ID = 777727718498949234
+COM_CHANNEL_ID = 773743473434857565
 
-UPDATE_KEY = "secret"   # Secret key used to update your bot instance through a PM "+update <UPDATE_KEY>"
-REBOOT_ON_UPDATE = True # Controls if the whole machine will reboot after a source code update, or only the Python instance
+# Secret key used to update your bot instance through a PM "+update <UPDATE_KEY>"
+UPDATE_KEY = "secret"
+# Controls if the whole machine will reboot after a code update, or only the Python instance
+REBOOT_ON_UPDATE = True
 ```
