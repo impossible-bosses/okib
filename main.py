@@ -134,16 +134,16 @@ async def send_db(to_id):
         await com(to_id, MessageType.SEND_DB, "", discord.File(f))
 
 def update_workspace(workspace_bytes):
-    global _open_lobbies, _wc3stats_down_message
+    global _open_lobbies, _wc3stats_down_message_id
 
     workspace_obj = pickle.loads(workspace_bytes)
     _open_lobbies = workspace_obj["open_lobbies"]
-    _wc3stats_down_message = workspace_obj["wc3stats_down_message"]
+    _wc3stats_down_message_id = workspace_obj["wc3stats_down_message_id"]
 
 async def send_workspace(to_id):
     workspace_obj = {
         "open_lobbies": _open_lobbies,
-        "wc3stats_down_message": _wc3stats_down_message
+        "wc3stats_down_message_id": _wc3stats_down_message_id
     }
     workspace_bytes = io.BytesIO(pickle.dumps(workspace_obj))
     await com(to_id, MessageType.SEND_WORKSPACE, "", discord.File(workspace_bytes))
@@ -234,7 +234,7 @@ async def ensure_display(func, *args, **kwargs):
             logging.info("Waiting for master to run {}".format(func_hash_str))
             response = await _com_hub.wait(MessageType.ENSURE_DISPLAY, 5)
         except asyncio.TimeoutError:
-            logging.info("Timeout on ensure display from master")
+            logging.warning("Timeout on ensure display from master")
 
         for message in response:
             message_split = message.split(":")
@@ -316,10 +316,12 @@ async def on_ready():
 
     logging.info("Connecting to bot network...")
     await com(-1, MessageType.CONNECT, str(VERSION))
+
+    connect_timeout = 10
     try:
-        await _com_hub.wait(MessageType.CONNECT_ACK, 5)
-        await _com_hub.wait(MessageType.SEND_DB, 5)
-        await _com_hub.wait(MessageType.SEND_WORKSPACE, 5)
+        await _com_hub.wait(MessageType.CONNECT_ACK, connect_timeout)
+        await _com_hub.wait(MessageType.SEND_DB, connect_timeout)
+        await _com_hub.wait(MessageType.SEND_WORKSPACE, connect_timeout)
     except asyncio.TimeoutError:
         logging.info("No connect acks after timeout, assuming control")
         await self_promote()
@@ -353,9 +355,11 @@ async def on_message(message):
 
 # ==========
 
+LOBBY_REFRESH_RATE = 5
+
 # lobbies
 _open_lobbies = set()
-_wc3stats_down_message = None
+_wc3stats_down_message_id = None
 
 class MapVersion:
     def __init__(self, file_name, ent_only = False, deprecated = False, counterfeit = False):
@@ -437,6 +441,9 @@ class Lobby:
             self.id, self.name, self.server, self.map, self.host, self.slots_taken, self.slots_total
         )
 
+    def is_updated(self, new):
+        return self.name != new.name or self.server != new.server or self.map != new.map or self.host != new.host or self.slots_taken != new.slots_taken or self.slots_total != new.slots_total
+
     def to_discord_message_info(self, open = True):
         COLOR_OPEN = discord.Colour.from_rgb(0, 255, 0)
         COLOR_CLOSED = discord.Colour.from_rgb(255, 0, 0)
@@ -499,7 +506,7 @@ async def send_message(channel, content, embed):
     return message.id
 
 async def report_ib_lobbies(channel):
-    global _open_lobbies, _wc3stats_down_message
+    global _open_lobbies, _wc3stats_down_message_id
 
     try:
         lobbies = get_ib_lobbies()
@@ -507,46 +514,55 @@ async def report_ib_lobbies(channel):
         logging.error("Error getting IB lobbies")
         traceback.print_exc()
 
-        if _wc3stats_down_message is None:
-            _wc3stats_down_message = await channel.send(content=":warning: WARNING: https://wc3stats.com/gamelist API down, no lobby list :warning:")
+        if _wc3stats_down_message_id is None:
+            _wc3stats_down_message_id = await ensure_display(send_message, channel, ":warning: WARNING: https://wc3stats.com/gamelist API down, no lobby list :warning:")
         return
 
-    if _wc3stats_down_message is not None:
+    if _wc3stats_down_message_id is not None:
+        message = None
         try:
-            await _wc3stats_down_message.delete()
+            message = await channel.fetch_message(_wc3stats_down_message_id)
         except Exception as e:
             pass
-        _wc3stats_down_message = None
+
+        _wc3stats_down_message_id = None
+        if message is not None:
+            await ensure_display(message.delete)
 
     new_open_lobbies = set()
     for lobby in _open_lobbies:
-        try:
-            message = await channel.fetch_message(lobby.message_id)
-        except Exception as e:
-            logging.error("Error fetching message with ID {}".format(lobby.message_id))
-            traceback.print_exc()
-            continue
-
         still_open = lobby in lobbies
         lobby_latest = lobby
+        should_update = False
         if still_open:
             for lobby2 in lobbies:
                 if lobby2 == lobby:
+                    should_update = lobby.is_updated(lobby2)
                     lobby_latest = lobby2
                     lobby_latest.message_id = lobby.message_id
                     break
             new_open_lobbies.add(lobby_latest)
 
-        try:
-            message_info = lobby_latest.to_discord_message_info(still_open)
-            if message_info is None:
-                logging.info("Lobby skipped: {}".format(lobby_latest))
+        logging.info("Lobby open={}, updated={}: {}".format(still_open, should_update, lobby_latest))
+        if should_update:
+            try:
+                message = await channel.fetch_message(lobby.message_id)
+            except Exception as e:
+                logging.error("Error fetching message with ID {}".format(lobby.message_id))
+                traceback.print_exc()
                 continue
-            logging.info("Lobby updated (open={}): {}".format(still_open, lobby_latest))
+
+            try:
+                message_info = lobby_latest.to_discord_message_info(still_open)
+                if message_info is None:
+                    logging.info("Lobby skipped: {}".format(lobby_latest))
+                    continue
+            except Exception as e:
+                logging.error("Failed to get lobby as message info for \"{}\"".format(lobby_latest.name))
+                traceback.print_exc()
+                continue
+
             await ensure_display(message.edit, embed=message_info["embed"])
-        except Exception as e:
-            logging.error("Failed to edit message for lobby \"{}\"".format(lobby_latest.name))
-            traceback.print_exc()
 
     _open_lobbies = new_open_lobbies
 
@@ -559,17 +575,15 @@ async def report_ib_lobbies(channel):
                     continue
                 logging.info("Lobby created: {}".format(lobby))
                 message_id = await ensure_display(send_message, channel, message_info["message"], message_info["embed"])
-                # message = await channel.send(content=message_info["message"], embed=message_info["embed"])
             except Exception as e:
                 logging.error("Failed to send message for lobby \"{}\"".format(lobby.name))
                 traceback.print_exc()
                 continue
 
             lobby.message_id = message_id
-            # lobby.message_id = message.id
             _open_lobbies.add(lobby)
 
-@loop(seconds=5)
+@loop(seconds=LOBBY_REFRESH_RATE)
 async def refresh_ib_lobbies():
     if not _initialized:
         return
