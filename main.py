@@ -650,7 +650,7 @@ if __name__ == "__main__":
         os.makedirs(logs_dir)
 
     datetime_now = datetime.datetime.now()
-    log_file_path = os.path.join(logs_dir, "{}.log".format(datetime_now.strftime("%Y%m%d_%H%M%S")))
+    log_file_path = os.path.join(logs_dir, "{}.{}.log".format(VERSION, datetime_now.strftime("%Y%m%d_%H%M%S")))
     print("Log file: {}".format(log_file_path))
 
     logging.basicConfig(
