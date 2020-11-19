@@ -134,10 +134,10 @@ async def send_db(to_id):
     with open(DB_FILE_PATH, "rb") as f:
         await com(to_id, MessageType.SEND_DB, "", discord.File(f))
 
-def update_workspace(file):
+def update_workspace(workspace_bytes):
     global _open_lobbies, _wc3stats_down_message
 
-    workspace_obj = pickle.load(file)
+    workspace_obj = pickle.loads(workspace_bytes)
     _open_lobbies = workspace_obj["open_lobbies"]
     _wc3stats_down_message = workspace_obj["wc3stats_down_message"]
 
@@ -188,7 +188,7 @@ async def parse_bot_com(from_id, message_type, message, attachment):
     elif message_type == MessageType.SEND_DB_ACK:
         pass
     elif message_type == MessageType.SEND_WORKSPACE:
-        workspace_bytes = attachment.read()
+        workspace_bytes = await attachment.read()
         update_workspace(workspace_bytes)
         await com(from_id, MessageType.SEND_WORKSPACE_ACK)
     elif message_type == MessageType.SEND_WORKSPACE_ACK:
