@@ -120,6 +120,7 @@ async def com(to_id, message_type, message = ""):
 async def parse_bot_com(from_id, message_type, message, attachment):
     global _im_master, _alive_instances, _master_instance
 
+    logging.info("{}, {}, {}".format(from_id, message_type, message))
     if message_type == MessageType.CONNECT:
         if _im_master:
             await com(from_id, MessageType.CONNECT_ACK, str(VERSION) + "+")
@@ -406,15 +407,15 @@ async def on_message(message):
         from_id = int(message_split[0])
         to_id = int(message_split[1])
         message_type = MessageType(message_split[2])
-        message = message_split[3]
+        content = message_split[3]
         if from_id != params.BOT_ID and (to_id == -1 or to_id == params.BOT_ID):
             # from another bot instance
-            logging.info("Communication received from {} to {}, message type {}, content = {}".format(from_id, to_id, message_type, message))
+            logging.info("Communication received from {} to {}, message type {}, content = {}".format(from_id, to_id, message_type, content))
 
             attachment = None
             if message.attachments:
                 attachment = message.attachments[0]
-            await parse_bot_com(from_id, message_type, message, attachment)
+            await parse_bot_com(from_id, message_type, content, attachment)
     else:
         await _client.process_commands(message)
 
