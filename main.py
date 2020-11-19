@@ -142,16 +142,8 @@ async def self_promote():
     logging.info("I'm in charge!")
 
 def get_function_hash_string(func, *args, **kwargs):
-    hashable_args = []
-    for arg in args:
-        if isinstance(arg, float) or isinstance(arg, int) or isinstance(arg, str):
-            hashable_args.append(arg)
-    for k, v in sorted(kwargs.items()):
-        if isinstance(v, float) or isinstance(v, int) or isinstance(v, str):
-            hashable_args.append((k,v))
-
-    arg_hash = hash(tuple(hashable_args))
-    return func.__name__ + "." + str(len(args)) + "." + str(len(kwargs)) + "." + hex(arg_hash)
+    # TODO eh, whatever
+    return func.__name__ + "." + str(len(args)) + "." + str(len(kwargs))
 
 async def ensure_display(func, *args, **kwargs):
     func_hash_str = get_function_hash_string(func, *args, **kwargs)
