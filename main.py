@@ -150,7 +150,7 @@ async def parse_bot_com(from_id, message_type, message, attachment):
         version = int(message_trim)
     elif message_type == MessageType.LET_MASTER:
         if _im_master:
-            logging.warn("I was unworthy :(")
+            logging.warning("I was unworthy :(")
             _im_master = False
 
         _master_instance = from_id
@@ -368,7 +368,7 @@ async def on_ready():
     logging.info("Connecting to bot network")
     await com(-1, MessageType.CONNECT, str(VERSION))
     try:
-        response = await _com_hub.wait(MessageType.CONNECT, 5)
+        response = await _com_hub.wait(MessageType.CONNECT_ACK, 5)
     except asyncio.TimeoutError:
         logging.info("No connect acks after timeout, assuming control")
         await self_promote()
