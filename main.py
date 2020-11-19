@@ -164,6 +164,24 @@ async def send_workspace(to_id):
     workspace_bytes = io.BytesIO(pickle.dumps(workspace_obj))
     await com(to_id, MessageType.SEND_WORKSPACE, "", discord.File(workspace_bytes))
 
+def update_source_and_reset():
+    repo = git.Repo(ROOT_DIR)
+    for remote in repo.remotes:
+        if remote.name == "origin":
+            logging.info("Pulling latest code from remote {}".format(remote))
+            remote.pull()
+
+            new_version = get_source_version()
+            if new_version > VERSION:
+                if params.REBOOT_ON_UPDATE:
+                    logging.info("Rebooting")
+                    os.system("sudo shutdown -r now")
+                else:
+                    logging.info("Exiting")
+                    exit()
+            else:
+                logging.error("Attempted to update, but version didn't upgrade ({} to {})".format(VERSION, new_version))
+
 async def parse_bot_com(from_id, message_type, message, attachment):
     global _im_master, _alive_instances, _master_instance
 
@@ -181,7 +199,7 @@ async def parse_bot_com(from_id, message_type, message, attachment):
             _alive_instances.add(from_id)
             # maybe explicitly wait for acks from other instances, too? naaah
         elif version > VERSION:
-            pass # TODO new version, update
+            update_source_and_reset()
         else:
             pass # TODO outdated version
     elif message_type == MessageType.CONNECT_ACK:
@@ -291,18 +309,7 @@ async def update(ctx, key):
     if key == params.UPDATE_KEY:
         # No ensure_display here because this isn't a distributed action
         await ctx.channel.send("Received update key. Pulling latest code and rebooting...")
-
-        repo = git.Repo(ROOT_DIR)
-        for remote in repo.remotes:
-            if remote.name == "origin":
-                logging.info("Pulling latest code from remote {}".format(remote))
-                remote.pull()
-                if params.REBOOT_ON_UPDATE:
-                    logging.info("Rebooting")
-                    os.system("sudo shutdown -r now")
-                else:
-                    logging.info("Exiting")
-                    exit()
+        update_source_and_reset()
 
 @_client.event
 async def on_ready():
