@@ -103,7 +103,6 @@ async def com(to_id, message_type, message = ""):
 async def parse_bot_com(from_id, message_type, message, attachment):
     global _im_master, _alive_instances, _master_instance
 
-    logging.info("{}, {}, {}".format(from_id, message_type, message))
     if message_type == MessageType.CONNECT:
         if _im_master:
             await com(from_id, MessageType.CONNECT_ACK, str(VERSION) + "+")
@@ -148,16 +147,16 @@ def get_function_args_str(*args, **kwargs):
     return str(len(args)) + "." + str(len(kwargs)) + "." + str(hash(args + (kwd_mark,) + tuple(sorted(kwargs.items()))))
 
 async def ensure_display(func, *args, **kwargs):
-    func_str = func.__name__ + "." + get_function_args_str() + ":"
+    func_str = func.__name__ + "." + get_function_args_str()
     if _im_master:
         result = await func(*args, **kwargs)
         if result is not None:
             if isinstance(result, float):
-                func_str += "f" + str(result)
+                func_str += ":f" + str(result)
             elif isinstance(result, int):
-                func_str += "i" + str(result)
+                func_str += ":i" + str(result)
             elif isinstance(result, str):
-                func_str += "s" + str(result)
+                func_str += ":s" + str(result)
             else:
                 raise ValueError("Unhandled return type {}".format(type(result)))
 
@@ -165,6 +164,7 @@ async def ensure_display(func, *args, **kwargs):
         return result
     else:
         try:
+            logging.info("Waiting for master to run {}".format(func_str))
             response = await _com_hub.wait(MessageType.ENSURE_DISPLAY, 5)
         except asyncio.TimeoutError:
             logging.info("No ensure display from master :(")
