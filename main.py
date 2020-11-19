@@ -209,8 +209,9 @@ def get_function_hash_string(func, *args, **kwargs):
     # TODO eh, whatever
     return func.__name__ + "." + str(len(args)) + "." + str(len(kwargs))
 
-async def send_message(channel, content, embed):
-    message = await channel.send(content=content, embed=embed)
+# Wrapper around channel.send that only returns the int message ID
+async def send_message(channel, *args, **kwargs):
+    message = await channel.send(*args, **kwargs)
     return message.id
 
 async def ensure_display(timeout, func, *args, **kwargs):
