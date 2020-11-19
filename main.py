@@ -488,8 +488,8 @@ class Lobby:
         return self.id
 
     def __str__(self):
-        return "[id={} name=\"{}\" server={} map=\"{}\" host={} slots={}/{}]".format(
-            self.id, self.name, self.server, self.map, self.host, self.slots_taken, self.slots_total
+        return "[id={} name=\"{}\" server={} map=\"{}\" host={} slots={}/{} message_id={}]".format(
+            self.id, self.name, self.server, self.map, self.host, self.slots_taken, self.slots_total, self.message_id
         )
 
     def is_updated(self, new):
