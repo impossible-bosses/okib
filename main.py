@@ -141,13 +141,14 @@ async def self_promote():
     await com(-1, MessageType.LET_MASTER)
     logging.info("I'm in charge!")
 
-def get_function_args_str(*args, **kwargs):
+def get_function_string(func, *args, **kwargs):
     # https://stackoverflow.com/questions/10220599/how-to-hash-args-kwargs-for-function-cache
     kwd_mark = object()
-    return str(len(args)) + "." + str(len(kwargs)) + "." + str(hash(args + (kwd_mark,) + tuple(sorted(kwargs.items()))))
+    arg_hash = hash(args + (kwd_mark,) + tuple(sorted(kwargs.items())))
+    return func.__name__ + "." + str(len(args)) + "." + str(len(kwargs)) + "." + str(arg_hash)
 
 async def ensure_display(func, *args, **kwargs):
-    func_str = func.__name__ + "." + get_function_args_str()
+    func_str = get_function_string(func, *args, **kwargs)
     if _im_master:
         result = await func(*args, **kwargs)
         if result is not None:
