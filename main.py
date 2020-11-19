@@ -305,6 +305,11 @@ async def ensure_display(timeout, func, *args, **kwargs):
             return await ensure_display(timeout, func, *args, **kwargs)
 
 @_client.command()
+async def ping(ctx, key):
+    if isinstance(ctx.channel, discord.DMChannel)
+        await ensure_display(send_message, ctx.channel, "pong")
+
+@_client.command()
 async def update(ctx, key):
     if key == params.UPDATE_KEY:
         # No ensure_display here because this isn't a distributed action
