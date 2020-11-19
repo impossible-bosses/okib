@@ -298,8 +298,10 @@ async def update(ctx, key):
                 logging.info("Pulling latest code from remote {}".format(remote))
                 remote.pull()
                 logging.info("Rebooting")
-                exit()
-                # os.system("shutdown /r /t 1")
+                if params.REBOOT_ON_UPDATE:
+                    os.system("shutdown /r /t 1")
+                else:
+                    exit()
 
 @_client.event
 async def on_ready():
