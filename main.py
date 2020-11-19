@@ -149,15 +149,18 @@ async def ensure_display(func, *args, **kwargs):
     func_hash_str = get_function_hash_string(func, *args, **kwargs)
     if _im_master:
         result = await func(*args, **kwargs)
+        func_hash_str += ":"
         if result is not None:
+            type_str = ""
             if isinstance(result, float):
-                func_hash_str += ":f" + str(result)
+                type_str = "f"
             elif isinstance(result, int):
-                func_hash_str += ":i" + str(result)
+                type_str = "i"
             elif isinstance(result, str):
-                func_hash_str += ":s" + str(result)
+                type_str = "s"
             else:
                 raise ValueError("Unhandled return type {}".format(type(result)))
+            func_hash_str += type_str + str(result)
 
         await com(-1, MessageType.ENSURE_DISPLAY, func_hash_str)
         return result
