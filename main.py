@@ -247,6 +247,7 @@ async def ensure_display(timeout, func, *args, **kwargs):
                 raise Exception("Incorrectly formatted message {}".format(message))
 
             if message_split[0] == func_hash_str:
+                logging.info("Master returned \"{}\"".format(message_split[1]))
                 if message_split[1] == "":
                     return None
 
@@ -353,7 +354,7 @@ async def on_message(message):
         content = message_split[3]
         if from_id != params.BOT_ID and (to_id == -1 or to_id == params.BOT_ID):
             # from another bot instance
-            logging.info("Communication received from {} to {}, message type {}, content = {}".format(from_id, to_id, message_type, content))
+            logging.info("Communication received from {} to {}, {}, content = {}".format(from_id, to_id, message_type, content))
 
             attachment = None
             if message.attachments:
