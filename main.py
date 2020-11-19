@@ -297,10 +297,11 @@ async def update(ctx, key):
             if remote.name == "origin":
                 logging.info("Pulling latest code from remote {}".format(remote))
                 remote.pull()
-                logging.info("Rebooting")
                 if params.REBOOT_ON_UPDATE:
-                    os.system("shutdown /r /t 1")
+                    logging.info("Rebooting")
+                    os.system("sudo shutdown -r now")
                 else:
+                    logging.info("Exiting")
                     exit()
 
 @_client.event
