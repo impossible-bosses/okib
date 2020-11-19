@@ -142,9 +142,15 @@ async def self_promote():
     logging.info("I'm in charge!")
 
 def get_function_hash_string(func, *args, **kwargs):
-    # https://stackoverflow.com/questions/10220599/how-to-hash-args-kwargs-for-function-cache
-    kwd_mark = object()
-    arg_hash = hash(args + (kwd_mark,) + tuple(sorted(kwargs.items())))
+    hashable_args = []
+    for arg in args:
+        if isinstance(arg, float) or isinstance(arg, int) or isinstance(arg, str):
+            hashable_args.append(arg)
+    for k, v in sorted(kwargs.items()):
+        if isinstance(v, float) or isinstance(v, int) or isinstance(v, str):
+            hashable_args.append((k,v))
+
+    arg_hash = hash(tuple(hashable_args))
     return func.__name__ + "." + str(len(args)) + "." + str(len(kwargs)) + "." + hex(arg_hash)
 
 async def ensure_display(func, *args, **kwargs):
@@ -489,7 +495,6 @@ async def report_ib_lobbies(channel):
                     continue
                 logging.info("Lobby created: {}".format(lobby))
                 message_id = await ensure_display(send_message, channel, message_info["message"], message_info["embed"])
-                logging.info(message_id)
                 # message = await channel.send(content=message_info["message"], embed=message_info["embed"])
             except Exception as e:
                 logging.error("Failed to send message for lobby \"{}\"".format(lobby.name))
