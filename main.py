@@ -51,10 +51,15 @@ _com_channel = None
 _im_master = False
 _alive_instances = set()
 _master_instance = None
+_callback = None
 
 # DB
 _db_conn = sqlite3.connect(DB_FILE_PATH)
 _db_cursor = _db_conn.cursor()
+
+# globals / workspace
+_open_lobbies = set()
+_wc3stats_down_message_id = None
 
 class MessageType(Enum):
     CONNECT = "connect"
@@ -79,8 +84,6 @@ class Timer:
     def cancel(self):
         self._task.cancel()
 
-_callback = None
-_return_values = {}
 
 async def com(to_id, message_type, message = "", file = None):
     assert isinstance(to_id, int)
@@ -123,19 +126,24 @@ async def send_db(to_id):
         await com(to_id, MessageType.SEND_DB, "", discord.File(f))
 
 def update_workspace(workspace_bytes):
-    global _open_lobbies, _return_values
+    global _open_lobbies, _wc3stats_down_message_id
 
     workspace_obj = pickle.loads(workspace_bytes)
     _open_lobbies = workspace_obj["open_lobbies"]
-    _return_values["apidownmsgid"] = workspace_obj["wc3stats_down_message_id"]
+    for key, value in workspace_obj["lobby_message_ids"].items():
+        globals()[key] = value
+    _wc3stats_down_message_id = workspace_obj["wc3stats_down_message_id"]
 
 async def send_workspace(to_id):
-    if "apidownmsgid" not in _return_values:
-        _return_values["apidownmsgid"] = None
+    lobby_message_ids = {}
+    for key, value in globals().items():
+        if "lobbymsg" in key:
+            lobby_message_ids[key] = value
 
     workspace_obj = {
         "open_lobbies": _open_lobbies,
-        "wc3stats_down_message_id": _return_values["apidownmsgid"]
+        "lobby_message_ids": lobby_message_ids,
+        "wc3stats_down_message_id": _wc3stats_down_message_id
     }
     workspace_bytes = io.BytesIO(pickle.dumps(workspace_obj))
     await com(to_id, MessageType.SEND_WORKSPACE, "", discord.File(workspace_bytes))
@@ -216,7 +224,7 @@ async def parse_bot_com(from_id, message_type, message, attachment):
                     value = value_str
                 else:
                     raise ValueError("Unhandled return type {}".format(data_type))
-            _return_values[kv[0]] = value
+            globals()[kv[0]] = value
         if from_id != _master_instance:
             _alive_instances.remove(_master_instance)
             _master_instance = from_id
@@ -278,7 +286,7 @@ async def ensure_display(func, *args, timeout=2, return_name=None, **kwargs):
         result = await func(*args, **kwargs)
         message = ""
         if return_name is not None:
-            _return_values[return_name] = result
+            globals()[return_name] = result
             message = return_name + "="
             # TODO should we allow return_name to be set if result is None?
             if result is not None:
@@ -392,9 +400,6 @@ async def on_message(message):
 
 LOBBY_REFRESH_RATE = 5
 
-# lobbies
-_open_lobbies = set()
-
 class MapVersion:
     def __init__(self, file_name, ent_only = False, deprecated = False, counterfeit = False):
         self.file_name = file_name
@@ -479,9 +484,9 @@ class Lobby:
 
     def get_message_id(self):
         key = self.get_message_id_key()
-        if key not in _return_values:
+        if key not in globals():
             return None
-        return _return_values[key]
+        return globals()[key]
 
     def is_updated(self, new):
         return self.name != new.name or self.server != new.server or self.map != new.map or self.host != new.host or self.slots_taken != new.slots_taken or self.slots_total != new.slots_total
@@ -544,29 +549,25 @@ def get_ib_lobbies():
     return ib_lobbies
 
 async def report_ib_lobbies(channel):
-    global _open_lobbies
+    global _open_lobbies, _wc3stats_down_message_id
 
     try:
         lobbies = get_ib_lobbies()
     except Exception as e:
         logging.error("Error getting IB lobbies, {}".format(e))
         traceback.print_exc()
-
-        if "apidownmsgid" not in _return_values:
-            _return_values["apidownmsgid"] = None
-        if _return_values["apidownmsgid"] is None:
-            await ensure_display(send_message, channel, ":warning: WARNING: https://wc3stats.com/gamelist API down, no lobby list :warning:", return_name="apidownmsgid")
-
+        if _wc3stats_down_message_id is None:
+            await ensure_display(send_message, channel, ":warning: WARNING: https://wc3stats.com/gamelist API down, no lobby list :warning:", return_name="_wc3stats_down_message_id")
         return
 
-    if "apidownmsgid" in _return_values and _return_values["apidownmsgid"] is not None:
+    if _wc3stats_down_message_id is not None:
         message = None
         try:
-            message = await channel.fetch_message(_return_values["apidownmsgid"])
+            message = await channel.fetch_message(_wc3stats_down_message_id)
         except Exception as e:
             pass
 
-        _return_values["apidownmsgid"] = None
+        _wc3stats_down_message_id = None
         if message is not None:
             await ensure_display(message.delete)
 
@@ -612,8 +613,8 @@ async def report_ib_lobbies(channel):
 
         if not still_open:
             key = lobby.get_message_id_key()
-            if key in _return_values:
-                del _return_values[key]
+            if key in globals():
+                del globals()[key]
 
     _open_lobbies = new_open_lobbies
 
