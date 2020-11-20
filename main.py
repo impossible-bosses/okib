@@ -257,8 +257,7 @@ async def send_message(channel, *args, **kwargs):
 async def ensure_display_backup(func, *args, timeout=2, return_name=None, **kwargs):
     global _master_instance, _alive_instances
 
-    logging.info(_master_instance)
-    logging.info(_alive_instances)
+    logging.info("backup {}".format(func))
     if _master_instance == None:
         # TODO hmmm...
         _alive_instances.remove(max(_alive_instances))
@@ -273,6 +272,7 @@ async def ensure_display_backup(func, *args, timeout=2, return_name=None, **kwar
 async def ensure_display(func, *args, timeout=2, return_name=None, **kwargs):
     global _callback
 
+    logging.info("ensure_display {}".format(func))
     if _im_master:
         result = await func(*args, **kwargs)
         message = ""
