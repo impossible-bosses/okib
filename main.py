@@ -268,7 +268,7 @@ async def send_message(channel, *args, **kwargs):
     message = await channel.send(*args, **kwargs)
     return message.id
 
-async def ensure_display_backup(func, *args, timeout=2, return_name=None, **kwargs):
+async def ensure_display_backup(func, *args, timeout=5, return_name=None, **kwargs):
     global _master_instance, _alive_instances
 
     logging.info("ensure_display_backup: old master {}, instances {}".format(_master_instance, _alive_instances))
@@ -283,7 +283,7 @@ async def ensure_display_backup(func, *args, timeout=2, return_name=None, **kwar
 
     await ensure_display(func, *args, timeout=timeout, return_name=return_name, **kwargs)
 
-async def ensure_display(func, *args, timeout=2, return_name=None, **kwargs):
+async def ensure_display(func, *args, timeout=5, return_name=None, **kwargs):
     global _callback
 
     if _im_master:
