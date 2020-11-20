@@ -13,8 +13,6 @@ PUB_CHANNEL_NAME = "pub-games"
 COM_GUILD_ID = 777727718498949234
 COM_CHANNEL_ID = 773743473434857565
 
-# Secret key used to update your bot instance through a PM "+update <UPDATE_KEY>"
-UPDATE_KEY = "secret"
 # Controls if the whole machine will reboot after a code update, or only the Python instance
 REBOOT_ON_UPDATE = True
 ```

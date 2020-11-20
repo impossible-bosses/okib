@@ -146,7 +146,6 @@ def update_source_and_reset():
 
             new_version = get_source_version()
             if new_version > VERSION:
-                # TODO send com to notify others of disconnect
                 if params.REBOOT_ON_UPDATE:
                     logging.info("Rebooting")
                     os.system("sudo shutdown -r now")
@@ -302,11 +301,25 @@ async def ping(ctx):
         await ensure_display(ctx.channel.send, "pong")
 
 @_client.command()
-async def update(ctx, key):
-    if key == params.UPDATE_KEY:
+async def update(ctx, bot_id):
+    global _master_instance, _alive_instances
+
+    bot_id = int(bot_id)
+    if bot_id == params.BOT_ID:
         # No ensure_display here because this isn't a distributed action
-        await ctx.channel.send("Received update key. Pulling latest code and rebooting...")
+        await ctx.channel.send("Updating code and restarting...")
         update_source_and_reset()
+    else:
+        if bot_id in _alive_instances:
+            _alive_instances.remove(bot_id)
+        else:
+            logging.error("Updating instance not in alive instances: {}".format(_alive_instances))
+
+        if _master_instance == bot_id:
+            _master_instance = None
+            if max(_alive_instances) == params.BOT_ID:
+                await self_promote()
+
 
 @_client.event
 async def on_ready():
