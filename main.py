@@ -182,9 +182,9 @@ async def parse_bot_com(from_id, message_type, message, attachment):
         message_trim = message
         if message[-1] == "+":
             logging.info("Received connect ack from master instance {}".format(from_id))
+            message_trim = message[:-1]
             _initialized = True
             _master_instance = from_id
-            message_trim = message[:-1]
             if _callback is not None:
                 _callback.cancel()
                 _callback = None
@@ -251,7 +251,7 @@ async def send_message(channel, *args, **kwargs):
     return message.id
 
 async def ensure_display_backup(func, *args, timeout=2, return_name=None, **kwargs):
-    global _master_instance, _alive_instances, _callback
+    global _master_instance, _alive_instances
 
     if _master_instance == None:
         _alive_instances.remove(max(_alive_instances))
@@ -366,7 +366,7 @@ async def update(ctx, key):
 
 @_client.event
 async def on_ready():
-    global _guild, _pub_channel, _com_channel, _initialized, _alive_instances
+    global _guild, _pub_channel, _com_channel, _initialized, _alive_instances, _callback
 
     guild_ib = None
     guild_com = None
