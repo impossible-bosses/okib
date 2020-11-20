@@ -129,6 +129,8 @@ def update_workspace(workspace_bytes):
     global _open_lobbies, _wc3stats_down_message_id
 
     workspace_obj = pickle.loads(workspace_bytes)
+    logging.info("Updating workspace: {}".format(workspace_obj))
+
     _open_lobbies = workspace_obj["open_lobbies"]
     for key, value in workspace_obj["lobby_message_ids"].items():
         globals()[key] = value
@@ -145,6 +147,8 @@ async def send_workspace(to_id):
         "lobby_message_ids": lobby_message_ids,
         "wc3stats_down_message_id": _wc3stats_down_message_id
     }
+    logging.info("Sending workspace: {}".format(workspace_obj))
+
     workspace_bytes = io.BytesIO(pickle.dumps(workspace_obj))
     await com(to_id, MessageType.SEND_WORKSPACE, "", discord.File(workspace_bytes))
 
