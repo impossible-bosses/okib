@@ -253,7 +253,9 @@ async def send_message(channel, *args, **kwargs):
 async def ensure_display_backup(func, *args, timeout=2, return_name=None, **kwargs):
     global _master_instance, _alive_instances
 
+    print("backup")
     if _master_instance == None:
+        # TODO hmmm...
         _alive_instances.remove(max(_alive_instances))
     else:
         _alive_instances.remove(_master_instance)
@@ -261,11 +263,12 @@ async def ensure_display_backup(func, *args, timeout=2, return_name=None, **kwar
     if max(_alive_instances) == params.BOT_ID:
         await self_promote()
 
-    await ensure_display(func, *args, return_name=return_name, **kwargs)
+    await ensure_display(func, *args, timeout=timeout, return_name=return_name, **kwargs)
 
 async def ensure_display(func, *args, timeout=2, return_name=None, **kwargs):
     global _callback
 
+    print("ensure_display")
     if _im_master:
         result = await func(*args, **kwargs)
         message = ""
@@ -286,6 +289,7 @@ async def ensure_display(func, *args, timeout=2, return_name=None, **kwargs):
 
         await com(-1, MessageType.ENSURE_DISPLAY, message)
     else:
+        print("not master")
         _callback = Timer(timeout, ensure_display_backup, *args, timeout=timeout, return_name=return_name, **kwargs)
 
 """
@@ -352,6 +356,7 @@ async def ensure_display(timeout, func, *args, **kwargs):
             return await ensure_display(timeout, func, *args, **kwargs)
 """
 
+# TODO rename when done
 @_client.command()
 async def test(ctx):
     if isinstance(ctx.channel, discord.channel.DMChannel):
