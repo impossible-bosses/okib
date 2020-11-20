@@ -67,8 +67,8 @@ class MessageType(Enum):
     SEND_WORKSPACE_ACK = "sendwsack"
 
 class Timer:
-    def __init__(self, timeout, func, *args, **kwargs):
-        self._timeout = timeout
+    def __init__(self, t, func, *args, **kwargs):
+        self._timeout = t
         self._function = functools.partial(func, *args, **kwargs)
         self._task = asyncio.ensure_future(self._job())
         
