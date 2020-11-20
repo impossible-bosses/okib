@@ -181,6 +181,7 @@ async def parse_bot_com(from_id, message_type, message, attachment):
     elif message_type == MessageType.CONNECT_ACK:
         message_trim = message
         if message[-1] == "+":
+            logging.info("Received connect ack from master instance {}".format(from_id))
             _initialized = True
             _master_instance = from_id
             message_trim = message[:-1]
