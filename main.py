@@ -293,7 +293,7 @@ async def ensure_display(func, *args, timeout=2, return_name=None, **kwargs):
 
         await com(-1, MessageType.ENSURE_DISPLAY, message)
     else:
-        _callback = Timer(timeout, ensure_display_backup, *args, timeout=timeout, return_name=return_name, **kwargs)
+        _callback = Timer(timeout, ensure_display_backup, func, *args, timeout=timeout, return_name=return_name, **kwargs)
 
 """
 def get_function_hash_string(func, *args, **kwargs):
