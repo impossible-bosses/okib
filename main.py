@@ -561,7 +561,7 @@ async def report_ib_lobbies(channel):
     try:
         lobbies = get_ib_lobbies()
     except Exception as e:
-        logging.error("Error getting IB lobbies")
+        logging.error("Error getting IB lobbies, {}".format(e))
         traceback.print_exc()
 
         if _wc3stats_down_message_id is None:
@@ -598,7 +598,7 @@ async def report_ib_lobbies(channel):
             try:
                 message = await channel.fetch_message(lobby.message_id)
             except Exception as e:
-                logging.error("Error fetching message with ID {}".format(lobby.message_id))
+                logging.error("Error fetching message with ID {}, {}".format(lobby.message_id, e))
                 traceback.print_exc()
                 continue
 
@@ -608,7 +608,7 @@ async def report_ib_lobbies(channel):
                     logging.info("Lobby skipped: {}".format(lobby_latest))
                     continue
             except Exception as e:
-                logging.error("Failed to get lobby as message info for \"{}\"".format(lobby_latest.name))
+                logging.error("Failed to get lobby as message info for \"{}\", {}".format(lobby_latest.name, e))
                 traceback.print_exc()
                 continue
 
@@ -626,7 +626,7 @@ async def report_ib_lobbies(channel):
                 logging.info("Lobby created: {}".format(lobby))
                 message_id = await ensure_display(timeout, send_message, channel, content=message_info["message"], embed=message_info["embed"])
             except Exception as e:
-                logging.error("Failed to send message for lobby \"{}\"".format(lobby.name))
+                logging.error("Failed to send message for lobby \"{}\", {}".format(lobby.name, e))
                 traceback.print_exc()
                 continue
 
@@ -642,7 +642,7 @@ async def refresh_ib_lobbies():
     try:
         await report_ib_lobbies(_pub_channel)
     except Exception as e:
-        logging.error("Exception in report_ib_lobbies")
+        logging.error("Exception in report_ib_lobbies, {}".format(e))
         traceback.print_exc()
 
 if __name__ == "__main__":
