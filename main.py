@@ -359,11 +359,10 @@ async def ensure_display(timeout, func, *args, **kwargs):
             return await ensure_display(timeout, func, *args, **kwargs)
 """
 
-# TODO rename when done
 @_client.command()
-async def test(ctx):
+async def ping(ctx):
     if isinstance(ctx.channel, discord.channel.DMChannel):
-        logging.info("testpong")
+        logging.info("pingpong")
         await ensure_display(ctx.channel.send, "pong")
 
 @_client.command()
@@ -533,7 +532,6 @@ class Lobby:
         self.slots_total = lobby_dict["slotsTotal"]
         self.created = lobby_dict["created"]
         self.last_updated = lobby_dict["lastUpdated"]
-        self.message_id = None
 
     def __eq__(self, other):
         return self.id == other.id
@@ -543,8 +541,17 @@ class Lobby:
 
     def __str__(self):
         return "[id={} name=\"{}\" server={} map=\"{}\" host={} slots={}/{} message_id={}]".format(
-            self.id, self.name, self.server, self.map, self.host, self.slots_taken, self.slots_total, self.message_id
+            self.id, self.name, self.server, self.map, self.host, self.slots_taken, self.slots_total, self.get_message_id()
         )
+
+    def get_message_id_key(self):
+        return "lobbymsg{}".format(self.id)
+
+    def get_message_id(self):
+        key = self.get_message_id_key()
+        if key not in _return_values:
+            return None
+        return _return_values[key]
 
     def is_updated(self, new):
         return self.name != new.name or self.server != new.server or self.map != new.map or self.host != new.host or self.slots_taken != new.slots_taken or self.slots_total != new.slots_total
@@ -642,16 +649,21 @@ async def report_ib_lobbies(channel):
                 if lobby2 == lobby:
                     should_update = lobby.is_updated(lobby2)
                     lobby_latest = lobby2
-                    lobby_latest.message_id = lobby.message_id
                     break
             new_open_lobbies.add(lobby_latest)
 
         logging.info("Lobby open={}, updated={}: {}".format(still_open, should_update, lobby_latest))
         if should_update:
+            message_id = lobby.get_message_id()
+            if message_id is None:
+                # TODO eh, what do we do here?
+                logging.error("Missing message ID for lobby {}".format(lobby))
+                continue
+
             try:
-                message = await channel.fetch_message(lobby.message_id)
+                message = await channel.fetch_message(message_id)
             except Exception as e:
-                logging.error("Error fetching message with ID {}, {}".format(lobby.message_id, e))
+                logging.error("Error fetching message with ID {}, {}".format(message_id, e))
                 traceback.print_exc()
                 continue
 
@@ -677,13 +689,13 @@ async def report_ib_lobbies(channel):
                     logging.info("Lobby skipped: {}".format(lobby))
                     continue
                 logging.info("Lobby created: {}".format(lobby))
-                message_id = await ensure_display(timeout, send_message, channel, content=message_info["message"], embed=message_info["embed"])
+                key = "lobbymsg{}".format(lobby.id)
+                await ensure_display(send_message, channel, content=message_info["message"], embed=message_info["embed"], return_name=key)
             except Exception as e:
                 logging.error("Failed to send message for lobby \"{}\", {}".format(lobby.name, e))
                 traceback.print_exc()
                 continue
 
-            lobby.message_id = message_id
             _open_lobbies.add(lobby)
 
 @loop(seconds=LOBBY_REFRESH_RATE)
