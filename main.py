@@ -184,6 +184,7 @@ async def parse_bot_com(from_id, message_type, message, attachment):
             logging.info("Received connect ack from master instance {}".format(from_id))
             message_trim = message[:-1]
             _initialized = True
+            _alive_instances.add(params.BOT_ID)
             _master_instance = from_id
             if _callback is not None:
                 _callback.cancel()
@@ -242,6 +243,9 @@ async def self_promote():
     _initialized = True
     _im_master = True
     _master_instance = params.BOT_ID
+    # Needed for initialization. Alternatively, can use function arg (what archi was doing)
+    if params.BOT_ID not in _alive_instances:
+        _alive_instances.add(params.BOT_ID)
     await com(-1, MessageType.LET_MASTER)
     logging.info("I'm in charge!")
 
@@ -253,7 +257,8 @@ async def send_message(channel, *args, **kwargs):
 async def ensure_display_backup(func, *args, timeout=2, return_name=None, **kwargs):
     global _master_instance, _alive_instances
 
-    print("backup")
+    logging.info(_master_instance)
+    logging.info(_alive_instances)
     if _master_instance == None:
         # TODO hmmm...
         _alive_instances.remove(max(_alive_instances))
@@ -268,7 +273,6 @@ async def ensure_display_backup(func, *args, timeout=2, return_name=None, **kwar
 async def ensure_display(func, *args, timeout=2, return_name=None, **kwargs):
     global _callback
 
-    print("ensure_display")
     if _im_master:
         result = await func(*args, **kwargs)
         message = ""
@@ -289,7 +293,6 @@ async def ensure_display(func, *args, timeout=2, return_name=None, **kwargs):
 
         await com(-1, MessageType.ENSURE_DISPLAY, message)
     else:
-        print("not master")
         _callback = Timer(timeout, ensure_display_backup, *args, timeout=timeout, return_name=return_name, **kwargs)
 
 """
