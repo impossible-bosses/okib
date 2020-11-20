@@ -130,6 +130,9 @@ def update_workspace(workspace_bytes):
     _return_values["apidownmsgid"] = workspace_obj["wc3stats_down_message_id"]
 
 async def send_workspace(to_id):
+    if "apidownmsgid" not in _return_values:
+        _return_values["apidownmsgid"] = None
+
     workspace_obj = {
         "open_lobbies": _open_lobbies,
         "wc3stats_down_message_id": _return_values["apidownmsgid"]
@@ -256,8 +259,7 @@ async def send_message(channel, *args, **kwargs):
 async def ensure_display_backup(func, *args, timeout=2, return_name=None, **kwargs):
     global _master_instance, _alive_instances
 
-    logging.info(_master_instance)
-    logging.info(_alive_instances)
+    logging.info("ensure_display_backup: old master {}, instances {}".format(_master_instance, _alive_instances))
     if _master_instance == None:
         # TODO hmmm...
         _alive_instances.remove(max(_alive_instances))
