@@ -184,7 +184,9 @@ async def parse_bot_com(from_id, message_type, message, attachment):
             _initialized = True
             _master_instance = from_id
             message_trim = message[:-1]
-            _callback.cancel()
+            if _callback is not None:
+                _callback.cancel()
+                _callback = None
         version = int(message_trim)
         _alive_instances.add(from_id)
     elif message_type == MessageType.LET_MASTER:
@@ -193,7 +195,9 @@ async def parse_bot_com(from_id, message_type, message, attachment):
             _im_master = False
         _master_instance = from_id
     elif message_type == MessageType.ENSURE_DISPLAY:
-        _callback.cancel()
+        if _callback is not None:
+            _callback.cancel()
+            _callback = None
         if message != "":
             kv = message.split("=")
             value = None
