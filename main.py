@@ -145,15 +145,15 @@ def update_source_and_reset():
             remote.pull()
 
             new_version = get_source_version()
-            if new_version > VERSION:
-                if params.REBOOT_ON_UPDATE:
-                    logging.info("Rebooting")
-                    os.system("sudo shutdown -r now")
-                else:
-                    logging.info("Exiting")
-                    exit()
-            else:
+            if new_version <= VERSION:
                 logging.error("Attempted to update, but version didn't upgrade ({} to {})".format(VERSION, new_version))
+
+            if params.REBOOT_ON_UPDATE:
+                logging.info("Rebooting")
+                os.system("sudo shutdown -r now")
+            else:
+                logging.info("Exiting")
+                exit()
 
 async def parse_bot_com(from_id, message_type, message, attachment):
     global _initialized, _im_master, _alive_instances, _master_instance, _callback
