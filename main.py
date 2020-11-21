@@ -557,7 +557,7 @@ def get_ib_lobbies():
 async def report_ib_lobbies(channel):
     global _open_lobbies, _wc3stats_down_message_id
 
-    timeout = LOBBY_REFRESH_RATE * 1.5
+    timeout = LOBBY_REFRESH_RATE * 2
     try:
         lobbies = get_ib_lobbies()
     except Exception as e:
