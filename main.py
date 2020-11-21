@@ -197,7 +197,6 @@ async def parse_bot_com(from_id, message_type, message, attachment):
         if message[-1] == "+":
             logging.info("Received connect ack from master instance {}".format(from_id))
             message_trim = message[:-1]
-            _initialized = True
             _alive_instances.add(params.BOT_ID)
             _master_instance = from_id
             if _callback is not None:
@@ -243,6 +242,8 @@ async def parse_bot_com(from_id, message_type, message, attachment):
         workspace_bytes = await attachment.read()
         update_workspace(workspace_bytes)
         await com(from_id, MessageType.SEND_WORKSPACE_ACK)
+        # This is the last step for bot instance connection
+        _initialized = True
     elif message_type == MessageType.SEND_WORKSPACE_ACK:
         pass
     else:
