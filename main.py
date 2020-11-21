@@ -1,3 +1,4 @@
+import aiohttp
 import asyncio
 import datetime
 import discord
@@ -10,7 +11,7 @@ import io
 import logging
 import os
 import pickle
-import requests
+#import requests
 import sqlite3
 import sys
 import traceback
@@ -527,6 +528,11 @@ class Lobby:
             self.id, self.name, self.server, self.map, self.host, self.slots_taken, self.slots_total, self.get_message_id()
         )
 
+    def is_ib(self):
+        return self.map.find("Legion") != -1 and self.map.find("TD") != -1 # test
+        #return self.map.find("Uther Party") != -1 # test
+        return self.map.find("Impossible") != -1 and self.map.find("Bosses") != -1
+
     def get_message_id_key(self):
         return "lobbymsg{}".format(self.id)
 
@@ -580,12 +586,30 @@ class Lobby:
             "embed": embed,
         }
 
-def is_ib_lobby(lobby):
-    return lobby.map.find("Legion") != -1 and lobby.map.find("TD") != -1 # test
-    #return lobby.map.find("Uther Party") != -1 # test
-    return lobby.map.find("Impossible") != -1 and lobby.map.find("Bosses") != -1
-
 def get_ib_lobbies():
+    timeout = aiohttp.ClientTimeout(total=LOBBY_REFRESH_RATE/2)
+    session = aiohttp.ClientSession(timeout=timeout)
+
+    response_wc3stats = await session.get("https://api.wc3stats.com/gamelist")
+    response_wc3stats_json = response_wc3stats.json()
+    if "body" not in response_wc3stats_json:
+        raise Exception("wc3stats HTTP response has no 'body'")
+
+    games_wc3stats = response_wc3stats_json["body"]
+    if not isinstance(games_wc3stats, list):
+        raise Exception("wc3stats HTTP response 'body' type is {}, not list".format(type(games_wc3stats)))
+
+    lobbies_wc3stats = [Lobby(game) for game in games]
+    ib_lobbies_wc3stats = set([l for l in lobbies_wc3stats if l.is_ib()])
+
+    await session.close()
+
+    logging.info("IB lobbies: {}/{} from wc3stats, {}/{} from ENT".format(
+        len(lobbies_wc3stats), len(ib_lobbies_wc3stats)
+    ))
+    return ib_lobbies_wc3stats
+
+    """
     response = requests.get("https://api.wc3stats.com/gamelist")
     games = response.json()["body"]
     if not isinstance(games, list):
@@ -596,6 +620,7 @@ def get_ib_lobbies():
     logging.info("{} total lobbies, {} IB lobbies".format(len(lobbies), len(ib_lobbies)))
 
     return ib_lobbies
+    """
 
 async def report_ib_lobbies(channel):
     global _open_lobbies, _wc3stats_down_message_id
