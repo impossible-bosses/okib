@@ -68,7 +68,7 @@ class MessageHub:
         self._message_queues[message_type].append(msg)
 
         # Trim old messages based on max age
-        timestamp_cutoff = timestamp_now - datetime.timedelta(seconds=MAX_AGE_SECONDS)
+        timestamp_cutoff = timestamp_now - datetime.timedelta(seconds=MessageHub.MAX_AGE_SECONDS)
         for message_type in self._message_queues.keys():
             self._message_queues[message_type] = [
                 m for m in self._message_queues[message_type] if m.timestamp > timestamp_cutoff
