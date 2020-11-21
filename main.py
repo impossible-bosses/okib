@@ -51,7 +51,7 @@ _com_channel = None
 _im_master = False
 _alive_instances = set()
 _master_instance = None
-_callback = None
+_callbacks = []
 
 # DB
 _db_conn = sqlite3.connect(DB_FILE_PATH)
@@ -171,7 +171,7 @@ def update_source_and_reset():
                 exit()
 
 async def parse_bot_com(from_id, message_type, message, attachment):
-    global _initialized, _im_master, _alive_instances, _master_instance, _callback
+    global _initialized, _im_master, _alive_instances, _master_instance, _callbacks
 
     if message_type == MessageType.CONNECT:
         if _im_master:
@@ -199,9 +199,9 @@ async def parse_bot_com(from_id, message_type, message, attachment):
             message_trim = message[:-1]
             _alive_instances.add(params.BOT_ID)
             _master_instance = from_id
-            if _callback is not None:
-                _callback.cancel()
-                _callback = None
+            for callback in _callbacks:
+                callback.cancel()
+            _callbacks = []
         version = int(message_trim)
         _alive_instances.add(from_id)
     elif message_type == MessageType.LET_MASTER:
@@ -210,9 +210,9 @@ async def parse_bot_com(from_id, message_type, message, attachment):
             _im_master = False
         _master_instance = from_id
     elif message_type == MessageType.ENSURE_DISPLAY:
-        if _callback is not None:
-            _callback.cancel()
-            _callback = None
+        for callback in _callbacks:
+            callback.cancel()
+        _callbacks = []
         if message != "":
             kv = message.split("=")
             value = None
@@ -285,7 +285,7 @@ async def ensure_display_backup(func, *args, timeout=2, return_name=None, **kwar
     await ensure_display(func, *args, timeout=timeout, return_name=return_name, **kwargs)
 
 async def ensure_display(func, *args, timeout=2, return_name=None, **kwargs):
-    global _callback
+    global _callbacks
 
     if _im_master:
         result = await func(*args, **kwargs)
@@ -307,7 +307,7 @@ async def ensure_display(func, *args, timeout=2, return_name=None, **kwargs):
 
         await com(-1, MessageType.ENSURE_DISPLAY, message)
     else:
-        _callback = Timer(timeout, ensure_display_backup, func, *args, timeout=timeout, return_name=return_name, **kwargs)
+        _callbacks.append(Timer(timeout, ensure_display_backup, func, *args, timeout=timeout, return_name=return_name, **kwargs))
 
 @_client.command()
 async def ping(ctx):
@@ -338,7 +338,7 @@ async def update(ctx, bot_id):
 
 @_client.event
 async def on_ready():
-    global _guild, _pub_channel, _com_channel, _initialized, _alive_instances, _callback
+    global _guild, _pub_channel, _com_channel, _initialized, _alive_instances, _callbacks
 
     guild_ib = None
     guild_com = None
@@ -375,7 +375,7 @@ async def on_ready():
 
     logging.info("Connecting to bot network...")
     await com(-1, MessageType.CONNECT, str(VERSION))
-    _callback = Timer(3, self_promote)
+    _callbacks.append(Timer(3, self_promote))
 
 @_client.event
 async def on_message(message):
