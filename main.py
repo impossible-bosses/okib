@@ -586,7 +586,7 @@ class Lobby:
             "embed": embed,
         }
 
-def get_ib_lobbies():
+async def get_ib_lobbies():
     timeout = aiohttp.ClientTimeout(total=LOBBY_REFRESH_RATE/2)
     session = aiohttp.ClientSession(timeout=timeout)
 
@@ -627,7 +627,7 @@ async def report_ib_lobbies(channel):
 
     window = LOBBY_REFRESH_RATE * 2
     try:
-        lobbies = get_ib_lobbies()
+        lobbies = await get_ib_lobbies()
     except Exception as e:
         logging.error("Error getting IB lobbies, {}".format(e))
         traceback.print_exc()
