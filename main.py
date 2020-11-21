@@ -538,7 +538,7 @@ class Lobby:
         }
 
 def is_ib_lobby(lobby):
-    #return lobby.map.find("Legion_TD") != -1 # test
+    return lobby.map.find("Legion_TD") != -1 # test
     #return lobby.map.find("Uther Party") != -1 # test
     return lobby.map.find("Impossible") != -1 and lobby.map.find("Bosses") != -1
 
