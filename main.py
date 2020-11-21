@@ -311,7 +311,7 @@ async def send_message(channel, *args, **kwargs):
     message = await channel.send(*args, **kwargs)
     return message.id
 
-async def ensure_display_backup(func, *args, window_seconds=2, return_name=None, **kwargs):
+async def ensure_display_backup(func, *args, window=2, return_name=None, **kwargs):
     global _master_instance, _alive_instances
 
     logging.info("ensure_display_backup: old master {}, instances {}".format(_master_instance, _alive_instances))
@@ -324,9 +324,9 @@ async def ensure_display_backup(func, *args, window_seconds=2, return_name=None,
     if max(_alive_instances) == params.BOT_ID:
         await self_promote()
 
-    await ensure_display(func, *args, window_seconds=window_seconds, return_name=return_name, **kwargs)
+    await ensure_display(func, *args, window=window, return_name=return_name, **kwargs)
 
-async def ensure_display(func, *args, window_seconds=2, return_name=None, **kwargs):
+async def ensure_display(func, *args, window=2, return_name=None, **kwargs):
     global _callbacks
 
     if _im_master:
@@ -349,8 +349,8 @@ async def ensure_display(func, *args, window_seconds=2, return_name=None, **kwar
 
         await com(-1, MessageType.ENSURE_DISPLAY, message)
     else:
-        if not _message_hub.got_message(MessageType.ENSURE_DISPLAY, window_seconds):
-            _callbacks.append(Timer(window_seconds, ensure_display_backup, func, *args, window_seconds=window_seconds, return_name=return_name, **kwargs))
+        if not _message_hub.got_message(MessageType.ENSURE_DISPLAY, window):
+            _callbacks.append(Timer(window, ensure_display_backup, func, *args, window=window, return_name=return_name, **kwargs))
 
 @_client.command()
 async def ping(ctx):
@@ -600,14 +600,14 @@ def get_ib_lobbies():
 async def report_ib_lobbies(channel):
     global _open_lobbies, _wc3stats_down_message_id
 
-    timeout = LOBBY_REFRESH_RATE * 2
+    window = LOBBY_REFRESH_RATE * 2
     try:
         lobbies = get_ib_lobbies()
     except Exception as e:
         logging.error("Error getting IB lobbies, {}".format(e))
         traceback.print_exc()
         if _wc3stats_down_message_id is None:
-            await ensure_display(send_message, channel, ":warning: WARNING: https://wc3stats.com/gamelist API down, no lobby list :warning:", timeout=timeout, return_name="_wc3stats_down_message_id")
+            await ensure_display(send_message, channel, ":warning: WARNING: https://wc3stats.com/gamelist API down, no lobby list :warning:", window=window, return_name="_wc3stats_down_message_id")
         return
 
     if _wc3stats_down_message_id is not None:
@@ -619,7 +619,7 @@ async def report_ib_lobbies(channel):
 
         _wc3stats_down_message_id = None
         if message is not None:
-            await ensure_display(message.delete, timeout=timeout)
+            await ensure_display(message.delete, window=window)
 
     new_open_lobbies = set()
     for lobby in _open_lobbies:
@@ -659,7 +659,7 @@ async def report_ib_lobbies(channel):
                 continue
 
             logging.info("Updating lobby (open={}): {}".format(still_open, lobby_latest))
-            await ensure_display(message.edit, embed=message_info["embed"], timeout=timeout)
+            await ensure_display(message.edit, embed=message_info["embed"], window=window)
 
         if not still_open:
             key = lobby.get_message_id_key()
@@ -677,7 +677,7 @@ async def report_ib_lobbies(channel):
                     continue
                 logging.info("Creating lobby: {}".format(lobby))
                 key = lobby.get_message_id_key()
-                await ensure_display(send_message, channel, content=message_info["message"], embed=message_info["embed"], timeout=timeout, return_name=key)
+                await ensure_display(send_message, channel, content=message_info["message"], embed=message_info["embed"], window=window, return_name=key)
             except Exception as e:
                 logging.error("Failed to send message for lobby \"{}\", {}".format(lobby.name, e))
                 traceback.print_exc()
