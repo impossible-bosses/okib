@@ -502,8 +502,8 @@ class Lobby:
 
         if self.map[-4:] != ".w3x":
             raise Exception("Bad map file: {}".format(self.map))
-        if self.slots_total != 9 and self.slots_total != 12:
-            raise Exception("Expected 9 or 12 total players, not {}, for map file {}".format(self.slots_total, self.map))
+        #if self.slots_total != 9 and self.slots_total != 12:
+        #    raise Exception("Expected 9 or 12 total players, not {}, for map file {}".format(self.slots_total, self.map))
 
         version = get_map_version(self.map)
         mark = ""
