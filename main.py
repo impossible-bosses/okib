@@ -18,8 +18,6 @@ import traceback
 import params
 
 ROOT_DIR = os.path.dirname(os.path.realpath(__file__))
-DB_FILE_PATH = os.path.join(ROOT_DIR, "IBCE.db")
-DB_ARCHIVE_PATH = os.path.join(ROOT_DIR, "archive", "IBCE.db")
 
 def get_source_version():
     repo = git.Repo(ROOT_DIR)
@@ -36,6 +34,59 @@ def get_source_version():
         raise Exception("HEAD commit sha not found: {}".format(repo.head.commit.hexsha))
     return total - index
 
+class MessageType(Enum):
+    CONNECT = "connect"
+    CONNECT_ACK = "connectack"
+    LET_MASTER = "letmaster"
+    ENSURE_DISPLAY = "ensure"
+    SEND_DB = "senddb"
+    SEND_DB_ACK = "senddback"
+    SEND_WORKSPACE = "sendws"
+    SEND_WORKSPACE_ACK = "sendwsack"
+
+class Message:
+    def __init__(self, timestamp, message):
+        self.timestamp = timestamp
+        self.message = message
+
+class MessageHub:
+    MAX_AGE_SECONDS = 30
+
+    def __init__(self):
+        self._message_queues = {}
+        for message_type in MessageType:
+            self._message_queues[message_type] = []
+
+    def on_message(self, message_type, message):
+        assert isinstance(message_type, MessageType)
+        assert isinstance(message, str)
+        assert message_type in self._message_queues
+
+        # TODO should I use the "real" message timestamp?
+        timestamp_now = datetime.datetime.now()
+        msg = Message(timestamp_now, message)
+        self._message_queues[message_type].append(msg)
+
+        # Trim old messages based on max age
+        timestamp_cutoff = timestamp_now - datetime.timedelta(seconds=MAX_AGE_SECONDS)
+        for message_type in self._message_queues.keys():
+            self._message_queues[message_type] = [
+                m for m in self._message_queues[message_type] if m.timestamp > timestamp_cutoff
+            ]
+
+    def got_message(self, message_type, window_seconds):
+        assert isinstance(message_type, MessageType)
+        assert message_type in self._message_queues
+
+        timestamp_cutoff = datetime.datetime.now() - datetime.timedelta(seconds=window_seconds)
+        messages_in_window = [
+            m for m in self._message_queues[message_type] if m.timestamp > timestamp_cutoff
+        ]
+        return len(messages_in_window) > 0
+
+# constants
+DB_FILE_PATH = os.path.join(ROOT_DIR, "IBCE.db")
+DB_ARCHIVE_PATH = os.path.join(ROOT_DIR, "archive", "IBCE.db")
 VERSION = get_source_version()
 print("Source version {}".format(VERSION))
 
@@ -52,6 +103,7 @@ _im_master = False
 _alive_instances = set()
 _master_instance = None
 _callbacks = []
+_message_hub = MessageHub()
 
 # DB
 _db_conn = sqlite3.connect(DB_FILE_PATH)
@@ -60,16 +112,6 @@ _db_cursor = _db_conn.cursor()
 # globals / workspace
 _open_lobbies = set()
 _wc3stats_down_message_id = None
-
-class MessageType(Enum):
-    CONNECT = "connect"
-    CONNECT_ACK = "connectack"
-    LET_MASTER = "letmaster"
-    ENSURE_DISPLAY = "ensure"
-    SEND_DB = "senddb"
-    SEND_DB_ACK = "senddback"
-    SEND_WORKSPACE = "sendws"
-    SEND_WORKSPACE_ACK = "sendwsack"
 
 class Timer:
     def __init__(self, t, func, *args, **kwargs):
@@ -171,7 +213,7 @@ def update_source_and_reset():
                 exit()
 
 async def parse_bot_com(from_id, message_type, message, attachment):
-    global _initialized, _im_master, _alive_instances, _master_instance, _callbacks
+    global _initialized, _im_master, _alive_instances, _master_instance, _callbacks, _message_hub
 
     if message_type == MessageType.CONNECT:
         if _im_master:
@@ -249,7 +291,7 @@ async def parse_bot_com(from_id, message_type, message, attachment):
     else:
         raise Exception("Unhandled message type {}".format(message_type))
 
-    #_com_hub.on_message(message_type, message)
+    _message_hub.on_message(message_type, message)
 
 # Promotes this bot instance to master
 async def self_promote():
@@ -269,7 +311,7 @@ async def send_message(channel, *args, **kwargs):
     message = await channel.send(*args, **kwargs)
     return message.id
 
-async def ensure_display_backup(func, *args, timeout=2, return_name=None, **kwargs):
+async def ensure_display_backup(func, *args, window_seconds=2, return_name=None, **kwargs):
     global _master_instance, _alive_instances
 
     logging.info("ensure_display_backup: old master {}, instances {}".format(_master_instance, _alive_instances))
@@ -282,9 +324,9 @@ async def ensure_display_backup(func, *args, timeout=2, return_name=None, **kwar
     if max(_alive_instances) == params.BOT_ID:
         await self_promote()
 
-    await ensure_display(func, *args, timeout=timeout, return_name=return_name, **kwargs)
+    await ensure_display(func, *args, window_seconds=window_seconds, return_name=return_name, **kwargs)
 
-async def ensure_display(func, *args, timeout=2, return_name=None, **kwargs):
+async def ensure_display(func, *args, window_seconds=2, return_name=None, **kwargs):
     global _callbacks
 
     if _im_master:
@@ -307,7 +349,8 @@ async def ensure_display(func, *args, timeout=2, return_name=None, **kwargs):
 
         await com(-1, MessageType.ENSURE_DISPLAY, message)
     else:
-        _callbacks.append(Timer(timeout, ensure_display_backup, func, *args, timeout=timeout, return_name=return_name, **kwargs))
+        if not _message_hub.got_message(MessageType.ENSURE_DISPLAY, window_seconds):
+            _callbacks.append(Timer(window_seconds, ensure_display_backup, func, *args, window_seconds=window_seconds, return_name=return_name, **kwargs))
 
 @_client.command()
 async def ping(ctx):
@@ -665,7 +708,7 @@ if __name__ == "__main__":
 
     logging.basicConfig(
         filename=log_file_path, level=logging.INFO,
-        format="%(asctime)s | %(levelname)s | %(filename)s:%(lineno)d | %(message)s", datefmt="%Y-%m-%d %H:%M:%S"
+        format="%(asctime)s %(levelname)s: %(message)s", datefmt="%Y-%m-%d %H:%M:%S"
     )
     logging.getLogger().addHandler(logging.StreamHandler(sys.stdout))
 
