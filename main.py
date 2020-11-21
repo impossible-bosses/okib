@@ -591,7 +591,6 @@ async def report_ib_lobbies(channel):
                     break
             new_open_lobbies.add(lobby_latest)
 
-        logging.info("Lobby open={}, updated={}: {}".format(still_open, should_update, lobby_latest))
         if should_update:
             message_id = lobby.get_message_id()
             if message_id is None:
@@ -616,6 +615,7 @@ async def report_ib_lobbies(channel):
                 traceback.print_exc()
                 continue
 
+            logging.info("Updating lobby (open={}): {}".format(still_open, lobby_latest))
             await ensure_display(message.edit, embed=message_info["embed"], timeout=timeout)
 
         if not still_open:
@@ -632,7 +632,7 @@ async def report_ib_lobbies(channel):
                 if message_info is None:
                     logging.info("Lobby skipped: {}".format(lobby))
                     continue
-                logging.info("Lobby created: {}".format(lobby))
+                logging.info("Creating lobby: {}".format(lobby))
                 key = lobby.get_message_id_key()
                 await ensure_display(send_message, channel, content=message_info["message"], embed=message_info["embed"], timeout=timeout, return_name=key)
             except Exception as e:
