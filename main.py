@@ -506,16 +506,24 @@ def get_map_version(map_file):
     return None
 
 class Lobby:
-    def __init__(self, lobby_dict):
+    def __init__(self, lobby_dict, is_ent):
         self.id = lobby_dict["id"]
         self.name = lobby_dict["name"]
-        self.server = lobby_dict["server"]
         self.map = lobby_dict["map"]
         self.host = lobby_dict["host"]
-        self.slots_taken = lobby_dict["slotsTaken"]
-        self.slots_total = lobby_dict["slotsTotal"]
-        self.created = lobby_dict["created"]
-        self.last_updated = lobby_dict["lastUpdated"]
+
+        if not is_ent:
+            self.server = lobby_dict["server"]
+            self.slots_taken = lobby_dict["slotsTaken"]
+            self.slots_total = lobby_dict["slotsTotal"]
+            self.created = lobby_dict["created"]
+            self.last_updated = lobby_dict["lastUpdated"]
+        else:
+            self.server = lobby_dict["location"]
+            self.slots_taken = lobby_dict["slots_taken"]
+            self.slots_total = lobby_dict["slots_total"]
+            self.created = None
+            self.last_updated = None
 
     def __eq__(self, other):
         return self.id == other.id
@@ -590,37 +598,34 @@ async def get_ib_lobbies():
     timeout = aiohttp.ClientTimeout(total=LOBBY_REFRESH_RATE/2)
     session = aiohttp.ClientSession(timeout=timeout)
 
-    response_wc3stats = await session.get("https://api.wc3stats.com/gamelist")
-    response_wc3stats_json = await response_wc3stats.json()
+    # Load wc3stats lobbies
+    wc3stats_response = await session.get("https://api.wc3stats.com/gamelist")
+    wc3stats_response_json = await wc3stats_response.json()
 
-    if "body" not in response_wc3stats_json:
+    if "body" not in wc3stats_response_json:
         raise Exception("wc3stats HTTP response has no 'body'")
-    games_wc3stats = response_wc3stats_json["body"]
-    if not isinstance(games_wc3stats, list):
-        raise Exception("wc3stats HTTP response 'body' type is {}, not list".format(type(games_wc3stats)))
+    wc3stats_body = wc3stats_response_json["body"]
+    if not isinstance(wc3stats_body, list):
+        raise Exception("wc3stats HTTP response 'body' type is {}, not list".format(type(wc3stats_body)))
 
-    lobbies_wc3stats = [Lobby(game) for game in games]
-    ib_lobbies_wc3stats = set([l for l in lobbies_wc3stats if l.is_ib()])
+    wc3stats_lobbies = [Lobby(obj) for obj in wc3stats_body]
+    wc3stats_ib_lobbies = set([lobby for lobby in wc3stats_lobbies if lobby.is_ib()])
+
+    # Load ENT lobbies
+    ent_response = await session.get("https://host.entgaming.net/allgames")
+    ent_response_json = await ent_response.json()
+    if not isinstance(ent_response_json, list):
+        raise Exception("ENT HTTP response type is {}, not list".format(type(ent_response_json)))
+
+    lobbies_ent = [Lobby(obj) for obj in ent_response_json]
+    ib_lobbies_ent = set([lobby for lobby in lobbies_ent if lobby.is_ib()])
 
     await session.close()
 
     logging.info("IB lobbies: {}/{} from wc3stats, {}/{} from ENT".format(
-        len(lobbies_wc3stats), len(ib_lobbies_wc3stats)
+        len(wc3stats_ib_lobbies), len(wc3stats_lobbies), len(ib_lobbies_ent), len(lobbies_ent)
     ))
-    return ib_lobbies_wc3stats
-
-    """
-    response = requests.get("https://api.wc3stats.com/gamelist")
-    games = response.json()["body"]
-    if not isinstance(games, list):
-        raise Exception("Property 'games' in HTTP response is not a list, {}".format(type(games)))
-
-    lobbies = [Lobby(game) for game in games]
-    ib_lobbies = set([lobby for lobby in lobbies if is_ib_lobby(lobby)])
-    logging.info("{} total lobbies, {} IB lobbies".format(len(lobbies), len(ib_lobbies)))
-
-    return ib_lobbies
-    """
+    return wc3stats_ib_lobbies
 
 async def report_ib_lobbies(channel):
     global _open_lobbies, _wc3stats_down_message_id
