@@ -591,10 +591,10 @@ async def get_ib_lobbies():
     session = aiohttp.ClientSession(timeout=timeout)
 
     response_wc3stats = await session.get("https://api.wc3stats.com/gamelist")
-    response_wc3stats_json = response_wc3stats.json()
+    response_wc3stats_json = await response_wc3stats.json()
+
     if "body" not in response_wc3stats_json:
         raise Exception("wc3stats HTTP response has no 'body'")
-
     games_wc3stats = response_wc3stats_json["body"]
     if not isinstance(games_wc3stats, list):
         raise Exception("wc3stats HTTP response 'body' type is {}, not list".format(type(games_wc3stats)))
