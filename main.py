@@ -946,7 +946,7 @@ class Lobby:
         description = "ENT" if self.is_ent else ""
         color = COLOR_ENT if self.is_ent else COLOR_BNET
         if not open:
-            description += "*started/unhosted*"
+            description += " *started/unhosted*"
             color = COLOR_CLOSED
         host = self.host if len(self.host) > 0 else "---"
         players_str = "{} / {}".format(slots_taken, slots_total)
