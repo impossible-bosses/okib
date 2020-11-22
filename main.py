@@ -1103,9 +1103,6 @@ async def report_ib_lobbies(channel):
 
 @loop(seconds=LOBBY_REFRESH_RATE)
 async def refresh_ib_lobbies():
-    #TODO test
-    if True:
-        return
     if not _initialized:
         return
 
