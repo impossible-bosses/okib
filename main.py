@@ -91,7 +91,9 @@ VERSION = get_source_version()
 print("Source version {}".format(VERSION))
 
 # discord connection
-_client = discord.ext.commands.Bot(command_prefix="+", intents=discord.Intents.all())
+client_intents = discord.Intents().default()
+client_intents.members = True
+_client = discord.ext.commands.Bot(command_prefix="+", intents=client_intents)
 _guild = None
 _pub_channel = None
 
