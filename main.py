@@ -609,7 +609,7 @@ async def get_ib_lobbies():
     if not isinstance(wc3stats_body, list):
         raise Exception("wc3stats HTTP response 'body' type is {}, not list".format(type(wc3stats_body)))
 
-    wc3stats_lobbies = [Lobby(obj) for obj in wc3stats_body]
+    wc3stats_lobbies = [Lobby(obj, is_ent=False) for obj in wc3stats_body]
     wc3stats_ib_lobbies = set([lobby for lobby in wc3stats_lobbies if lobby.is_ib()])
 
     # Load ENT lobbies
@@ -618,7 +618,7 @@ async def get_ib_lobbies():
     if not isinstance(ent_response_json, list):
         raise Exception("ENT HTTP response type is {}, not list".format(type(ent_response_json)))
 
-    lobbies_ent = [Lobby(obj) for obj in ent_response_json]
+    lobbies_ent = [Lobby(obj, is_ent=True) for obj in ent_response_json]
     ib_lobbies_ent = set([lobby for lobby in lobbies_ent if lobby.is_ib()])
 
     await session.close()
