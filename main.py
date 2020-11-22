@@ -312,7 +312,7 @@ async def send_message(channel, *args, **kwargs):
     return message.id
 
 async def ensure_display_backup(func, *args, window=2, return_name=None, **kwargs):
-    global _master_instance, _alive_instances, _callbacks, _resolve_master_timeout
+    global _master_instance, _alive_instances, _callbacks, _is_master_timeout
 
     logging.info("ensure_display_backup: old master {}, instances {}".format(_master_instance, _alive_instances))
 
