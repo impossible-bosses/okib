@@ -91,7 +91,7 @@ VERSION = get_source_version()
 print("Source version {}".format(VERSION))
 
 # discord connection
-_client = discord.ext.commands.Bot(command_prefix="+")
+_client = discord.ext.commands.Bot(command_prefix="+", intents=discord.Intents.all())
 _guild = None
 _pub_channel = None
 
@@ -460,42 +460,6 @@ async def on_message(message):
     else:
         await _client.process_commands(message)
 
-@_client.event
-async def on_reaction_add(reaction, user):
-    global okib_members, noib_members
-
-    if reaction.message.id == OKIB_message_id and user.bot == False:
-        modify = False
-        if user.roles[len(user.roles) - 1] >= _guild.get_role(peon_id):
-            try:
-                if reaction.emoji == OKIB_emote:
-                    if user not in okib_members:
-                        okib_members.append(user)
-                        modify = True
-                    if user in noib_members:
-                        noib_members.remove(user)
-                        modify = True
-                    await reaction.remove(user)
-
-                elif reaction.emoji == NOIB_emote:
-                    if user not in noib_members:
-                        noib_members.append(user)
-                        modify = True
-                    if user in okib_members:
-                        okib_members.remove(user)
-                        modify = True
-                    await reaction.remove(user)
-                else:
-                    await reaction.remove(user)
-
-
-            except AttributeError:
-                await reaction.remove(user)
-            if modify:
-                await list_update()
-        else:
-            await reaction.remove(user)
-
 # ==== OKIB ========================================================================================
 
 THIS_BOT_USER = None
@@ -642,6 +606,7 @@ async def okib(ctx, arg=None):
     global gatherer
     global gathered
 
+    logging.info("okib")
     no_power_msg = "You do not have enough power to perform such an action"
     adv = False
     if ctx.message.author.roles[len(ctx.message.author.roles) - 1] <= _guild.get_role(peon_id):
@@ -691,6 +656,7 @@ async def okib(ctx, arg=None):
 
 @_client.command()
 async def noib(ctx):
+    logging.info("noib")
     if(ctx.message.author.roles[len(ctx.message.author.roles)-1] <= _guild.get_role(peon_id)):
         await ctx.message.channel.send('you do not have enough power to perform such an action')
         return
@@ -725,6 +691,89 @@ async def noib(ctx):
             modify = True
     if modify:
         await list_update()
+
+async def peon_promote(member):
+    channel = await member.create_dm()
+    await ensure_display(channel.send, "Congratulation on being promoted to peon !\nYou are now able to register for official ENT games. To do so, you have to use the :okib: and the :noib: reactions when the clan is looking for ENT players. By declaring you up for a game, you're confirming you can join the game when it starts within 20 mins. You'll get notified when we reach desired number of players and when the game is actually hosted.")
+
+async def grunt_promote(member):
+    channel = await member.create_dm()
+    await ensure_display(channel.send, "Congratulation on being promoted to grunt !\nYou are now able to start your own gather with the !okib command in the #general channel. When you do so, you have access to the !noib command to cancel your gather, don't forget to cancel it before you leave, so you don't leave an old gather for the next bot user.\nYou can now cancel anyone's gather after at least 2 hours of the first !okib command.\nYou can also remove player from your gather with the !noib @player command. Use these rights wisely.")
+
+async def shaman_promote(member):
+    channel = await member.create_dm()
+    await ensure_display(channel.send, "Congratulation on being promoted to shaman !\nYou have now full access to all commands of anyone's gather. This include manually adding players (by-passing peon rank requirement) with the !okib @player command and removing any player with the !noib @player command. You can cancel anyone's gather at any time with the basic !noib. Additionally, if you find that someone accidentally cancels a gather, retrieve old list of players with the !okib retrieve command, only if a new gather hasn't been started already.")
+
+@_client.event
+async def on_reaction_add(reaction, user):
+    global okib_members, noib_members
+
+    if reaction.message.id == OKIB_message_id and user.bot == False:
+        modify = False
+        if user.roles[len(user.roles) - 1] >= _guild.get_role(peon_id):
+            try:
+                if reaction.emoji == OKIB_emote:
+                    if user not in okib_members:
+                        okib_members.append(user)
+                        modify = True
+                    if user in noib_members:
+                        noib_members.remove(user)
+                        modify = True
+                    await reaction.remove(user)
+
+                elif reaction.emoji == NOIB_emote:
+                    if user not in noib_members:
+                        noib_members.append(user)
+                        modify = True
+                    if user in okib_members:
+                        okib_members.remove(user)
+                        modify = True
+                    await reaction.remove(user)
+                else:
+                    await reaction.remove(user)
+
+
+            except AttributeError:
+                await reaction.remove(user)
+            if modify:
+                await list_update()
+        else:
+            await reaction.remove(user)
+
+@_client.event
+async def on_member_update(before, after):
+    logging.info("on_member_update, before={} after={}".format(before, after))
+
+    if before.guild == _guild:
+        #promoted
+        if before.roles[len(before.roles)-1] < _guild.get_role(shaman_id) and before.roles[len(before.roles)-1] > _guild.get_role(peon_id):
+            #was grunt
+            if after.roles[len(after.roles)-1] >= _guild.get_role(shaman_id):
+                #promoted to shaman
+                await shaman_promote(after)
+        elif before.roles[len(before.roles)-1] == _guild.get_role(peon_id):
+            #was peon
+            if after.roles[len(after.roles)-1] > _guild.get_role(peon_id) and after.roles[len(after.roles)-1] < _guild.get_role(shaman_id):
+                #promoted to grunt
+                await grunt_promote(after)
+            elif after.roles[len(after.roles)-1] >= _guild.get_role(shaman_id):
+                #promoted to shaman
+                await grunt_promote(after)
+                await shaman_promote(after)
+        elif before.roles[len(before.roles)-1] < _guild.get_role(peon_id):
+            #was nothing
+            if after.roles[len(after.roles)-1] == _guild.get_role(peon_id):
+                #promoted to peon3
+                await peon_promote(after)
+            elif after.roles[len(after.roles)-1] > _guild.get_role(peon_id) and after.roles[len(after.roles)-1] < _guild.get_role(shaman_id):
+                #promoted to grunt
+                await peon_promote(after)
+                await grunt_promote(after)
+            elif after.roles[len(after.roles)-1] >= _guild.get_role(shaman_id):
+                #promoted to shaman
+                await peon_promote(after)
+                await grunt_promote(after)
+                await shaman_promote(after)
 
 # ==== LOBBIES =====================================================================================
 
@@ -1021,6 +1070,9 @@ async def report_ib_lobbies(channel):
 
 @loop(seconds=LOBBY_REFRESH_RATE)
 async def refresh_ib_lobbies():
+    #TODO test
+    if True:
+        return
     if not _initialized:
         return
 
