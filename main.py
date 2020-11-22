@@ -85,13 +85,13 @@ class MessageHub:
         return len(messages_in_window) > 0
 
 # constants
-DB_FILE_PATH = os.path.join(ROOT_DIR, "IBCE.db")
-DB_ARCHIVE_PATH = os.path.join(ROOT_DIR, "archive", "IBCE.db")
+DB_FILE_PATH = os.path.join(ROOT_DIR, "IBCE_WARN.db")
+DB_ARCHIVE_PATH = os.path.join(ROOT_DIR, "archive", "IBCE_WARN.db")
 VERSION = get_source_version()
 print("Source version {}".format(VERSION))
 
 # discord connection
-_client = discord.ext.commands.Bot(command_prefix="+")
+_client = discord.ext.commands.Bot(command_prefix="+", intents=discord.Intents.all())
 _guild = None
 _pub_channel = None
 
@@ -105,10 +105,6 @@ _master_instance = None
 _callbacks = []
 _message_hub = MessageHub()
 _is_master_timeout = True
-
-# DB
-_db_conn = sqlite3.connect(DB_FILE_PATH)
-_db_cursor = _db_conn.cursor()
 
 # globals / workspace
 _open_lobbies = set()
@@ -145,9 +141,6 @@ async def com(to_id, message_type, message = "", file = None):
         await _com_channel.send(payload, file=file)
 
 def archive_db():
-    global _db_conn
-
-    _db_conn.close()
     try:
         os.mkdir(os.path.dirname(DB_ARCHIVE_PATH))
     except FileExistsError:
@@ -155,14 +148,9 @@ def archive_db():
     os.replace(DB_FILE_PATH, DB_ARCHIVE_PATH)
 
 async def update_db(db_bytes):
-    global _db_conn
-
     archive_db()
     with open(DB_FILE_PATH, "wb") as f:
         f.write(db_bytes)
-
-    _db_conn = sqlite3.connect(DB_FILE_PATH)
-    _db_cursor = _db_conn.cursor()
 
 async def send_db(to_id):
     with open(DB_FILE_PATH, "rb") as f:
@@ -371,7 +359,7 @@ async def ping(ctx):
         await ensure_display(ctx.channel.send, "pong")
 
 @_client.command()
-async def update(ctx, bot_id):
+async def update(ctx, bot_id):  # TODO default bot_id=None ??
     global _master_instance, _alive_instances
 
     bot_id = int(bot_id)
@@ -394,6 +382,10 @@ async def update(ctx, bot_id):
 @_client.event
 async def on_ready():
     global _guild, _pub_channel, _com_channel, _initialized, _alive_instances, _callbacks
+    global OKIB_emote
+    global NOIB_emote
+    OKIB_emote = _client.get_emoji(okib_emoji_id)
+    NOIB_emote = _client.get_emoji(noib_emoji_id)
 
     guild_ib = None
     guild_com = None
@@ -456,7 +448,355 @@ async def on_message(message):
     else:
         await _client.process_commands(message)
 
-# ==========
+# ==== OKIB ========================================================================================
+
+THIS_BOT_USER = None
+OKIB_channel =  None
+OKIB_message = None
+OKIB_list_message = None
+OKIB_message_id = None
+okib_reaction = None
+noib_reaction = None
+OKIB_emote = None
+NOIB_emote = None
+OKIB_1 = None
+NO_POWER_MSG = "You do not have enough power to perform such an action."
+okib_emoji_id = 506072066039087164 # ok
+okib_emoji_string = '<:okib:' + str(okib_emoji_id)+ '>'
+noib_emoji_id = 477544228629512193 # ok
+noib_emoji_string = '<:noib:' + str(noib_emoji_id)+ '>'
+ibgather_emoji_string ='<:ib:' + str(451846742661398528)+ '>' + '<:ib2:' + str(590986772734017536)+ '>'
+okib_members = []
+noib_members = []
+gatherer = None
+gathered = False
+gatherTime = datetime.datetime.now()
+peon_id = 431854796748619777
+shaman_id = 431854421635366912
+
+async def gather():
+    gatherstring = ""
+    for member in okib_members:
+        gatherstring = gatherstring + " " + member.mention
+
+    await ensure_display(OKIB_channel.send, gatherstring + " Time to play !\n" + okib_emoji_string)
+    # TODO 2 lines, big emojis
+    # await OKIB_channel.send(gatherstring + " Time to play !")
+    # await OKIB_channel.send(okib_emoji_string)
+
+def get_okib_list():
+    if len(okib_members) == 0:
+        return ""
+    if len(okib_members) == 1:
+        if okib_members[0].nick is not None:
+            okiblist = okib_members[0].nick
+        else:
+            okiblist = okib_members[0].name
+    else :
+        first = True
+        okiblist = ''
+        for member in okib_members:
+            if first == True:
+                if member.nick is not None:
+                    okiblist = okiblist + member.nick
+                else:
+                    okiblist = okiblist + member.name
+                first = False
+            else:
+                if member.nick is not None:
+                    okiblist = okiblist + ', ' + member.nick
+                else:
+                    okiblist = okiblist + ', ' + member.name
+    return okiblist
+
+def get_noib_list():
+    if len(noib_members) == 0:
+        return ""
+    if len(noib_members) == 1:
+        if noib_members[0].nick is not None:
+            noiblist = noib_members[0].nick
+        else:
+            noiblist = noib_members[0].name
+    else:
+        first = True
+        noiblist = ''
+        for member in noib_members:
+            if first == True:
+                if member.nick is not None:
+                    noiblist = noiblist + member.nick
+                else:
+                    noiblist = noiblist + member.name
+                first = False
+            else:
+                if member.nick is not None:
+                    noiblist = noiblist + ', ' + member.nick
+                else:
+                    noiblist = noiblist + ', ' + member.name
+    return noiblist
+
+async def check8():
+    global gathered
+    if len(okib_members) == 8 and not gathered:
+        gathered = True
+        await gather()
+
+async def check7():
+    global gathered
+    if len(okib_members) == 7 and gathered:
+        gathered = False
+
+async def list_update():
+    global gatherer
+
+    if gatherer.nick is not None:
+        g = gatherer.nick
+    else:
+        g = gatherer.name
+
+    list_content = g + " asks : \n" + okib_emoji_string  + " " + str(len(okib_members)) + "/8 : " + get_okib_list() + '\n' + noib_emoji_string  + " : " + get_noib_list()
+    await ensure_display(OKIB_list_message.edit, content=list_content)
+    await check8()
+    await check7()
+
+async def up(ctx):
+    global OKIB_channel
+    global OKIB_list_message
+    global OKIB_message
+    global okib_emoji_string
+    global noib_emoji_string
+    global ibgather_emoji_string
+    global OKIB_list_message_id
+    global OKIB_message_id
+    global OKIB_emote
+    global NOIB_emote
+
+    await OKIB_message.delete()
+    await OKIB_list_message.delete()
+
+    OKIB_list_message_id = (await ctx.send(okib_emoji_string +' : \n' + noib_emoji_string +' : ' )).id
+    OKIB_message_id = (await ctx.send(ibgather_emoji_string)).id
+    OKIB_list_message = await OKIB_channel.fetch_message(OKIB_list_message_id)
+    OKIB_message = await OKIB_channel.fetch_message(OKIB_message_id)
+    await OKIB_message.add_reaction(OKIB_emote)
+    await OKIB_message.add_reaction(NOIB_emote)
+    await list_update()
+
+@_client.command()
+async def okib(ctx, arg=None):
+    global OKIB_channel
+    global OKIB_list_message
+    global OKIB_message
+    global OKIB_list_message_id
+    global OKIB_message_id
+    global okib_members
+    global noib_members
+    global gatherer
+    global gathered
+
+    logging.info("okib")
+    adv = False
+    if ctx.message.author.roles[len(ctx.message.author.roles) - 1] <= _guild.get_role(peon_id):
+        await ensure_display(ctx.message.channel.send, NO_POWER_MSG)
+        return
+    if ctx.message.author.roles[len(ctx.message.author.roles) - 1] >= _guild.get_role(shaman_id) or ctx.message.author == gatherer:
+        adv = True
+    if adv == False and arg != None:
+        await ensure_display(ctx.message.channel.send, NO_POWER_MSG)
+        return
+    await ctx.message.delete()
+
+
+    if OKIB_channel is None:
+        gatherer = ctx.message.author
+        gatherTime = datetime.datetime.now()
+        #Check for option
+        if adv and arg == 'retrieve':
+            pass
+        else:
+            gathered = False
+            okib_members = []
+            noib_members = []
+
+        OKIB_channel = ctx.message.channel
+        OKIB_list_message_id = (await ctx.send(okib_emoji_string +' : \n' + noib_emoji_string +' : ' )).id
+        OKIB_message_id = (await ctx.send(ibgather_emoji_string)).id
+        OKIB_list_message = await OKIB_channel.fetch_message(OKIB_list_message_id)
+        OKIB_message = await OKIB_channel.fetch_message(OKIB_message_id)
+        await OKIB_message.add_reaction(OKIB_emote)
+        await OKIB_message.add_reaction(NOIB_emote)
+        await list_update()
+    elif arg == None:
+        await up(ctx)
+    modify = False
+    for user in ctx.message.mentions:
+        if user not in okib_members:
+            okib_members.append(user)
+            modify = True
+        if user in noib_members:
+            noib_members.remove(user)
+            modify = True
+    if modify or arg == 'retrieve':
+        await list_update()
+
+@_client.command()
+async def noib(ctx):
+    if ctx.message.author.roles[len(ctx.message.author.roles) - 1] <= _guild.get_role(peon_id):
+        await ensure_display(ctx.message.channel.send, NO_POWER_MSG)
+        return
+    if (ctx.message.author.roles[len(ctx.message.author.roles) - 1] < _guild.get_role(shaman_id)) and ctx.message.author != gatherer:
+        if (gatherTime + datetime.timedelta(hours=2)) > datetime.datetime.now():
+            await ensure_display(ctx.message.channel.send, NO_POWER_MSG)
+            return
+        pass
+
+    await ctx.message.delete()
+
+    global OKIB_channel
+    global OKIB_list_message
+    global OKIB_message
+
+    if not ctx.message.mentions:
+        OKIB_channel = None
+        if OKIB_list_message is not None:
+            await OKIB_list_message.delete()
+        if OKIB_message is not None:
+            await OKIB_message.delete()
+        OKIB_list_message = None
+        OKIB_message = None
+
+    modify = False
+    for user in ctx.message.mentions:
+        if user not in noib_members:
+            noib_members.append(user)
+            modify = True
+        if user in okib_members:
+            okib_members.remove(user)
+            modify = True
+    if modify:
+        await list_update()
+
+@_client.event
+async def on_reaction_add(reaction, user):
+    global okib_members, noib_members
+
+    if reaction.message.id == OKIB_message_id and user.bot == False:
+        modify = False
+        if user.roles[len(user.roles) - 1] >= _guild.get_role(peon_id):
+            try:
+                if reaction.emoji == OKIB_emote:
+                    if user not in okib_members:
+                        okib_members.append(user)
+                        modify = True
+                    if user in noib_members:
+                        noib_members.remove(user)
+                        modify = True
+                    await reaction.remove(user)
+
+                elif reaction.emoji == NOIB_emote:
+                    if user not in noib_members:
+                        noib_members.append(user)
+                        modify = True
+                    if user in okib_members:
+                        okib_members.remove(user)
+                        modify = True
+                    await reaction.remove(user)
+                else:
+                    await reaction.remove(user)
+
+
+            except AttributeError:
+                await reaction.remove(user)
+            if modify:
+                await list_update()
+        else:
+            await reaction.remove(user)
+
+async def peon_promote(member):
+    channel = await member.create_dm()
+    await ensure_display(channel.send, "Congratulation on being promoted to peon !\nYou are now able to register for official ENT games. To do so, you have to use the :okib: and the :noib: reactions when the clan is looking for ENT players. By declaring you up for a game, you're confirming you can join the game when it starts within 20 mins. You'll get notified when we reach desired number of players and when the game is actually hosted.")
+
+async def grunt_promote(member):
+    channel = await member.create_dm()
+    await ensure_display(channel.send, "Congratulation on being promoted to grunt !\nYou are now able to start your own gather with the !okib command in the #general channel. When you do so, you have access to the !noib command to cancel your gather, don't forget to cancel it before you leave, so you don't leave an old gather for the next bot user.\nYou can now cancel anyone's gather after at least 2 hours of the first !okib command.\nYou can also remove player from your gather with the !noib @player command. Use these rights wisely.")
+
+async def shaman_promote(member):
+    channel = await member.create_dm()
+    await ensure_display(channel.send, "Congratulation on being promoted to shaman !\nYou have now full access to all commands of anyone's gather. This include manually adding players (by-passing peon rank requirement) with the !okib @player command and removing any player with the !noib @player command. You can cancel anyone's gather at any time with the basic !noib. Additionally, if you find that someone accidentally cancels a gather, retrieve old list of players with the !okib retrieve command, only if a new gather hasn't been started already.")
+
+@_client.event
+async def on_member_update(before, after):
+    logging.info("on_member_update, before={} after={}".format(before, after))
+
+    if before.guild == _guild:
+        #promoted
+        if before.roles[len(before.roles)-1] < _guild.get_role(shaman_id) and before.roles[len(before.roles)-1] > _guild.get_role(peon_id):
+            #was grunt
+            if after.roles[len(after.roles)-1] >= _guild.get_role(shaman_id):
+                #promoted to shaman
+                await shaman_promote(after)
+        elif before.roles[len(before.roles)-1] == _guild.get_role(peon_id):
+            #was peon
+            if after.roles[len(after.roles)-1] > _guild.get_role(peon_id) and after.roles[len(after.roles)-1] < _guild.get_role(shaman_id):
+                #promoted to grunt
+                await grunt_promote(after)
+            elif after.roles[len(after.roles)-1] >= _guild.get_role(shaman_id):
+                #promoted to shaman
+                await grunt_promote(after)
+                await shaman_promote(after)
+        elif before.roles[len(before.roles)-1] < _guild.get_role(peon_id):
+            #was nothing
+            if after.roles[len(after.roles)-1] == _guild.get_role(peon_id):
+                #promoted to peon3
+                await peon_promote(after)
+            elif after.roles[len(after.roles)-1] > _guild.get_role(peon_id) and after.roles[len(after.roles)-1] < _guild.get_role(shaman_id):
+                #promoted to grunt
+                await peon_promote(after)
+                await grunt_promote(after)
+            elif after.roles[len(after.roles)-1] >= _guild.get_role(shaman_id):
+                #promoted to shaman
+                await peon_promote(after)
+                await grunt_promote(after)
+                await shaman_promote(after)
+
+def nonquery(query):
+    conn = sqlite3.connect(DB_FILE_PATH)
+    cursor = conn.cursor()
+    cursor.execute(query)
+    conn.commit()
+    conn.close()
+
+@_client.command()
+async def warn(ctx, arg1, *, arg2=""):
+    if ctx.message.author.roles[len(ctx.message.author.roles) - 1] < _guild.get_role(shaman_id):
+        await ensure_display(ctx.message.channel.send, NO_POWER_MSG)
+        return
+
+    for user in ctx.message.mentions:
+        sqlquery = "INSERT INTO Events (Event_type,Player_id,Reason,Datetime,Warner) VALUES (666,{},\"{}\",\"{}\",\"{}\")".format(user.id, arg2, datetime.datetime.now(), ctx.message.author.display_name)
+        nonquery(sqlquery)
+        await ensure_display(ctx.message.channel.send, "User <@!{}> has been warned !".format(user.id))
+        
+@_client.command()
+async def pedigree(ctx):
+    if ctx.message.author.roles[len(ctx.message.author.roles) - 1] < _guild.get_role(peon_id):
+        await ensure_display(ctx.message.channel.send, NO_POWER_MSG)
+        return
+
+    conn = sqlite3.connect(DB_FILE_PATH)
+    cursor = conn.cursor()
+    for user in ctx.message.mentions:
+        sqlquery = "SELECT player_id,Reason,Datetime,Warner FROM Events WHERE Event_type = 666 AND Player_id = " + str(user.id)
+        cursor.execute(sqlquery)
+        row = cursor.fetchone()
+        if row is None:
+            await ensure_display(ctx.message.channel.send, "User <@!{}> has never been warned yet !".format(user.id))
+        else:
+            while row:
+                await ensure_display(ctx.message.channel.send, "{} => User <@!{}> has been warned by {} for the following reason:\n{}".format(row[2], row[0], row[3], row[1]))
+                row = cursor.fetchone()
+    conn.close()
+
+# ==== LOBBIES =====================================================================================
 
 LOBBY_REFRESH_RATE = 5
 QUERY_RETRIES_BEFORE_WARNING = 10
@@ -583,7 +923,7 @@ class Lobby:
         elif version.counterfeit:
             mark = ":x:"
             message = ":warning: *WARNING: Counterfeit version* :warning:"
-        elif version.ent_only:
+        elif not self.is_ent and version.ent_only:
             mark = ":x:"
             message = ":warning: *WARNING: Incompatible version* :warning:"
         elif version.deprecated:
@@ -760,6 +1100,8 @@ async def refresh_ib_lobbies():
     except Exception as e:
         logging.error("Exception in report_ib_lobbies, {}".format(e))
         traceback.print_exc()
+
+# ==== MAIN ========================================================================================
 
 if __name__ == "__main__":
     logs_dir = os.path.join(ROOT_DIR, "logs")

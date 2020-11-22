@@ -2,3 +2,4 @@ params.py
 __pycache__/
 archive/
 logs/
+IBCE_WARN.db
