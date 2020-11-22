@@ -315,6 +315,8 @@ async def ensure_display_backup(func, *args, window=2, return_name=None, **kwarg
     global _master_instance, _alive_instances
 
     logging.info("ensure_display_backup: old master {}, instances {}".format(_master_instance, _alive_instances))
+    # TODO not quite right. we still want the backups to all execute,
+    # we just don't necessarily want to recalculate master
     for callback in _callbacks:
         callback.cancel()
     _callbacks = []
@@ -584,6 +586,7 @@ class Lobby:
         slots_taken = self.slots_taken
         slots_total = self.slots_total
         if not self.is_ent:
+            # Not sure why, but IB bnet lobbies have 1 extra slot
             slots_taken -= 1
             slots_total -= 1
 
