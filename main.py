@@ -472,6 +472,7 @@ noib_reaction = None
 OKIB_emote = None
 NOIB_emote = None
 OKIB_1 = None
+NO_POWER_MSG = "You do not have enough power to perform such an action"
 okib_emoji_id = 506072066039087164 # ok
 okib_emoji_string = '<:okib:' + str(okib_emoji_id)+ '>'
 noib_emoji_id = 477544228629512193 # ok
@@ -565,9 +566,7 @@ async def list_update():
         g = gatherer.name
 
     list_content = g + " asks : \n" + okib_emoji_string  + " " + str(len(okib_members)) + "/8 : " + get_okib_list() + '\n' + noib_emoji_string  + " : " + get_noib_list()
-    # TODO ensure_display
     await ensure_display(OKIB_list_message.edit, content=list_content)
-    # await OKIB_list_message.edit(content=list_content)
     await check8()
     await check7()
 
@@ -607,17 +606,14 @@ async def okib(ctx, arg=None):
     global gathered
 
     logging.info("okib")
-    no_power_msg = "You do not have enough power to perform such an action"
     adv = False
     if ctx.message.author.roles[len(ctx.message.author.roles) - 1] <= _guild.get_role(peon_id):
-        await ensure_display(ctx.message.channel.send, no_power_msg)
-        # await ctx.message.channel.send('you do not have enough power to perform such an action')
+        await ensure_display(ctx.message.channel.send, NO_POWER_MSG)
         return
     if ctx.message.author.roles[len(ctx.message.author.roles) - 1] >= _guild.get_role(shaman_id) or ctx.message.author == gatherer:
         adv = True
     if adv == False and arg != None:
-        await ensure_display(ctx.message.channel.send, no_power_msg)
-        # await ctx.message.channel.send('you do not have enough power to perform such an action')
+        await ensure_display(ctx.message.channel.send, NO_POWER_MSG)
         return
     await ctx.message.delete()
 
@@ -656,13 +652,12 @@ async def okib(ctx, arg=None):
 
 @_client.command()
 async def noib(ctx):
-    logging.info("noib")
-    if(ctx.message.author.roles[len(ctx.message.author.roles)-1] <= _guild.get_role(peon_id)):
-        await ctx.message.channel.send('you do not have enough power to perform such an action')
+    if ctx.message.author.roles[len(ctx.message.author.roles) - 1] <= _guild.get_role(peon_id):
+        await ensure_display(ctx.message.channel.send, NO_POWER_MSG)
         return
-    if(((ctx.message.author.roles[len(ctx.message.author.roles)-1] < _guild.get_role(shaman_id)) and ctx.message.author!=gatherer) ):
-        if (gatherTime + datetime.timedelta(hours=2) > datetime.datetime.now()):
-            await ctx.message.channel.send('you do not have enough power to perform such an action')
+    if (ctx.message.author.roles[len(ctx.message.author.roles) - 1] < _guild.get_role(shaman_id)) and ctx.message.author != gatherer:
+        if (gatherTime + datetime.timedelta(hours=2)) > datetime.datetime.now():
+            await ensure_display(ctx.message.channel.send, NO_POWER_MSG)
             return
         pass
 
@@ -691,18 +686,6 @@ async def noib(ctx):
             modify = True
     if modify:
         await list_update()
-
-async def peon_promote(member):
-    channel = await member.create_dm()
-    await ensure_display(channel.send, "Congratulation on being promoted to peon !\nYou are now able to register for official ENT games. To do so, you have to use the :okib: and the :noib: reactions when the clan is looking for ENT players. By declaring you up for a game, you're confirming you can join the game when it starts within 20 mins. You'll get notified when we reach desired number of players and when the game is actually hosted.")
-
-async def grunt_promote(member):
-    channel = await member.create_dm()
-    await ensure_display(channel.send, "Congratulation on being promoted to grunt !\nYou are now able to start your own gather with the !okib command in the #general channel. When you do so, you have access to the !noib command to cancel your gather, don't forget to cancel it before you leave, so you don't leave an old gather for the next bot user.\nYou can now cancel anyone's gather after at least 2 hours of the first !okib command.\nYou can also remove player from your gather with the !noib @player command. Use these rights wisely.")
-
-async def shaman_promote(member):
-    channel = await member.create_dm()
-    await ensure_display(channel.send, "Congratulation on being promoted to shaman !\nYou have now full access to all commands of anyone's gather. This include manually adding players (by-passing peon rank requirement) with the !okib @player command and removing any player with the !noib @player command. You can cancel anyone's gather at any time with the basic !noib. Additionally, if you find that someone accidentally cancels a gather, retrieve old list of players with the !okib retrieve command, only if a new gather hasn't been started already.")
 
 @_client.event
 async def on_reaction_add(reaction, user):
@@ -740,6 +723,18 @@ async def on_reaction_add(reaction, user):
         else:
             await reaction.remove(user)
 
+async def peon_promote(member):
+    channel = await member.create_dm()
+    await ensure_display(channel.send, "Congratulation on being promoted to peon !\nYou are now able to register for official ENT games. To do so, you have to use the :okib: and the :noib: reactions when the clan is looking for ENT players. By declaring you up for a game, you're confirming you can join the game when it starts within 20 mins. You'll get notified when we reach desired number of players and when the game is actually hosted.")
+
+async def grunt_promote(member):
+    channel = await member.create_dm()
+    await ensure_display(channel.send, "Congratulation on being promoted to grunt !\nYou are now able to start your own gather with the !okib command in the #general channel. When you do so, you have access to the !noib command to cancel your gather, don't forget to cancel it before you leave, so you don't leave an old gather for the next bot user.\nYou can now cancel anyone's gather after at least 2 hours of the first !okib command.\nYou can also remove player from your gather with the !noib @player command. Use these rights wisely.")
+
+async def shaman_promote(member):
+    channel = await member.create_dm()
+    await ensure_display(channel.send, "Congratulation on being promoted to shaman !\nYou have now full access to all commands of anyone's gather. This include manually adding players (by-passing peon rank requirement) with the !okib @player command and removing any player with the !noib @player command. You can cancel anyone's gather at any time with the basic !noib. Additionally, if you find that someone accidentally cancels a gather, retrieve old list of players with the !okib retrieve command, only if a new gather hasn't been started already.")
+
 @_client.event
 async def on_member_update(before, after):
     logging.info("on_member_update, before={} after={}".format(before, after))
@@ -774,6 +769,44 @@ async def on_member_update(before, after):
                 await peon_promote(after)
                 await grunt_promote(after)
                 await shaman_promote(after)
+
+def nonquery(query):
+    conn = sqlite3.connect("IBCE_WARN.db")
+    cursor = conn.cursor()
+    cursor.execute(query)
+    conn.commit()
+    conn.close()
+
+@_client.command()
+async def warn(ctx, arg1, *, arg2=""):
+    if ctx.message.author.roles[len(ctx.message.author.roles) - 1] < _guild.get_role(shaman_id):
+        await ensure_display(ctx.message.channel.send, NO_POWER_MSG)
+        return
+
+    for user in ctx.message.mentions:
+        sqlquery = "INSERT INTO Events (Event_type,Player_id,Reason,Datetime,Warner) VALUES (666,{},\"{}\",\"{}\",\"{}\")".format(user.id, arg2, datetime.datetime.now(), ctx.message.author.display_name)
+        nonquery(sqlquery)
+        await ensure_display(ctx.message.channel.send, "User <@!{}> has been warned !".format(user.id))
+        
+@_client.command()
+async def pedigree(ctx):
+    if ctx.message.author.roles[len(ctx.message.author.roles) - 1] < _guild.get_role(peon_id):
+        await ensure_display(ctx.message.channel.send, NO_POWER_MSG)
+        return
+
+    conn = sqlite3.connect("IBCE_WARN.db")
+    cursor = conn.cursor()
+    for user in ctx.message.mentions:
+        sqlquery = "SELECT player_id,Reason,Datetime,Warner FROM Events WHERE Event_type = 666 AND Player_id = " + str(user.id)
+        cursor.execute(sqlquery)
+        row = cursor.fetchone()
+        if row is None:
+            await ensure_display(ctx.message.channel.send, "User <@!{}> has never been warned yet !".format(user.id))
+        else:
+            while row:
+                await ensure_display(ctx.message.channel.send, "{} => User <@!{}> has been warned by {} for the following reason:\n{}".format(row[2], row[0], row[3], row[1]))
+                row = cursor.fetchone()
+    conn.close()
 
 # ==== LOBBIES =====================================================================================
 
