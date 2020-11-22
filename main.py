@@ -112,7 +112,8 @@ _db_cursor = _db_conn.cursor()
 
 # globals / workspace
 _open_lobbies = set()
-_wc3stats_down_message_id = None
+_api_down_tries = 0
+_api_down_message_id = None
 
 class TimedCallback:
     def __init__(self, t, func, *args, **kwargs):
@@ -168,7 +169,7 @@ async def send_db(to_id):
         await com(to_id, MessageType.SEND_DB, "", discord.File(f))
 
 def update_workspace(workspace_bytes):
-    global _open_lobbies, _wc3stats_down_message_id
+    global _open_lobbies, _api_down_message_id
 
     workspace_obj = pickle.loads(workspace_bytes)
     logging.info("Updating workspace: {}".format(workspace_obj))
@@ -176,7 +177,7 @@ def update_workspace(workspace_bytes):
     _open_lobbies = workspace_obj["open_lobbies"]
     for key, value in workspace_obj["lobby_message_ids"].items():
         globals()[key] = value
-    _wc3stats_down_message_id = workspace_obj["wc3stats_down_message_id"]
+    _api_down_message_id = workspace_obj["api_down_message_id"]
 
 async def send_workspace(to_id):
     lobby_message_ids = {}
@@ -187,7 +188,7 @@ async def send_workspace(to_id):
     workspace_obj = {
         "open_lobbies": _open_lobbies,
         "lobby_message_ids": lobby_message_ids,
-        "wc3stats_down_message_id": _wc3stats_down_message_id
+        "api_down_message_id": _api_down_message_id
     }
     logging.info("Sending workspace: {}".format(workspace_obj))
 
@@ -456,6 +457,7 @@ async def on_message(message):
 # ==========
 
 LOBBY_REFRESH_RATE = 5
+QUERY_RETRIES_BEFORE_WARNING = 10
 
 class MapVersion:
     def __init__(self, file_name, ent_only=False, deprecated=False, counterfeit=False, slots=[8,11]):
@@ -549,7 +551,7 @@ class Lobby:
         )
 
     def is_ib(self):
-        #return self.map.find("Legion") != -1 and self.map.find("TD") != -1 # test
+        return self.map.find("Legion") != -1 and self.map.find("TD") != -1 # test
         #return self.map.find("Uther Party") != -1 # test
         return self.map.find("Impossible") != -1 and self.map.find("Bosses") != -1
 
@@ -622,9 +624,15 @@ async def get_ib_lobbies():
     timeout = aiohttp.ClientTimeout(total=LOBBY_REFRESH_RATE/2)
     session = aiohttp.ClientSession(timeout=timeout)
 
-    # Load wc3stats lobbies
-    wc3stats_response = await session.get("https://api.wc3stats.com/gamelist")
-    wc3stats_response_json = await wc3stats_response.json()
+    # Query APIs
+    responses = await asyncio.gather(
+        session.get("https://api.wc3stats.com/gamelist"),
+        session.get("https://host.entgaming.net/allgames")
+    )
+    await session.close()
+
+    # Parse wc3stats lobbies
+    wc3stats_response_json = await responses[0].json()
 
     if "body" not in wc3stats_response_json:
         raise Exception("wc3stats HTTP response has no 'body'")
@@ -635,16 +643,14 @@ async def get_ib_lobbies():
     wc3stats_lobbies = [Lobby(obj, is_ent=False) for obj in wc3stats_body]
     wc3stats_ib_lobbies = set([lobby for lobby in wc3stats_lobbies if lobby.is_ib()])
 
-    # Load ENT lobbies
-    ent_response = await session.get("https://host.entgaming.net/allgames")
-    ent_response_json = await ent_response.json()
+    # Parse ENT lobbies
+    ent_response_json = await responses[1].json()
     if not isinstance(ent_response_json, list):
         raise Exception("ENT HTTP response type is {}, not list".format(type(ent_response_json)))
 
     ent_lobbies = [Lobby(obj, is_ent=True) for obj in ent_response_json]
     ent_ib_lobbies = set([lobby for lobby in ent_lobbies if lobby.is_ib()])
 
-    await session.close()
 
     logging.info("IB lobbies: {}/{} from wc3stats, {}/{} from ENT".format(
         len(wc3stats_ib_lobbies), len(wc3stats_lobbies), len(ent_ib_lobbies), len(ent_lobbies)
@@ -652,26 +658,29 @@ async def get_ib_lobbies():
     return wc3stats_ib_lobbies | ent_ib_lobbies
 
 async def report_ib_lobbies(channel):
-    global _open_lobbies, _wc3stats_down_message_id
+    global _open_lobbies, _api_down_message_id
 
     window = LOBBY_REFRESH_RATE * 2
     try:
         lobbies = await get_ib_lobbies()
     except Exception as e:
-        logging.error("Error getting IB lobbies, {}".format(e))
+        logging.error("Error getting IB lobbies, {} tries, {}".format(_api_down_tries, e))
         traceback.print_exc()
-        if _wc3stats_down_message_id is None:
-            await ensure_display(send_message, channel, ":warning: WARNING: https://wc3stats.com/gamelist API down, no lobby list :warning:", window=window, return_name="_wc3stats_down_message_id")
+
+        _api_down_tries += 1
+        if _api_down_tries > QUERY_RETRIES_BEFORE_WARNING and _api_down_message_id is None:
+            await ensure_display(send_message, channel, ":warning: WARNING: https://wc3stats.com/gamelist API down, no lobby list :warning:", window=window, return_name="_api_down_message_id")
         return
 
-    if _wc3stats_down_message_id is not None:
+    if _api_down_message_id is not None:
         message = None
         try:
-            message = await channel.fetch_message(_wc3stats_down_message_id)
+            message = await channel.fetch_message(_api_down_message_id)
         except Exception as e:
             pass
 
-        _wc3stats_down_message_id = None
+        _api_down_tries = 0
+        _api_down_message_id = None
         if message is not None:
             await ensure_display(message.delete, window=window)
 
