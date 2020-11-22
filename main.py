@@ -554,7 +554,7 @@ class Lobby:
     def is_updated(self, new):
         return self.name != new.name or self.server != new.server or self.map != new.map or self.host != new.host or self.slots_taken != new.slots_taken or self.slots_total != new.slots_total
 
-    def to_discord_message_info(self, open = True):
+    def to_discord_message_info(self, open=True):
         COLOR_OPEN = discord.Colour.from_rgb(0, 255, 0)
         COLOR_CLOSED = discord.Colour.from_rgb(255, 0, 0)
 
@@ -579,14 +579,16 @@ class Lobby:
             mark = ":x:"
             message = ":warning: *WARNING: Old map version* :warning:"
 
-        description = "" if open else "*started/unhosted*"
+        description = "ENT" if self.is_ent else ""
+        if not open:
+            description += "*started/unhosted*"
         color = COLOR_OPEN if open else COLOR_CLOSED
         embed_title = self.map[:-4] + "  " + mark
 
         embed = discord.Embed(title=embed_title, description=description, color=color)
         embed.add_field(name="Lobby Name", value=self.name, inline=False)
         embed.add_field(name="Host", value=self.host, inline=True)
-        embed.add_field(name="Region", value=self.server, inline=True)
+        embed.add_field(name="Server", value=self.server, inline=True)
         players_str = "{} / {}".format(self.slots_taken - 1, self.slots_total - 1)
         embed.add_field(name="Players", value=players_str, inline=True)
 
@@ -618,15 +620,15 @@ async def get_ib_lobbies():
     if not isinstance(ent_response_json, list):
         raise Exception("ENT HTTP response type is {}, not list".format(type(ent_response_json)))
 
-    lobbies_ent = [Lobby(obj, is_ent=True) for obj in ent_response_json]
-    ib_lobbies_ent = set([lobby for lobby in lobbies_ent if lobby.is_ib()])
+    ent_lobbies = [Lobby(obj, is_ent=True) for obj in ent_response_json]
+    ent_ib_lobbies = set([lobby for lobby in ent_lobbies if lobby.is_ib()])
 
     await session.close()
 
     logging.info("IB lobbies: {}/{} from wc3stats, {}/{} from ENT".format(
-        len(wc3stats_ib_lobbies), len(wc3stats_lobbies), len(ib_lobbies_ent), len(lobbies_ent)
+        len(wc3stats_ib_lobbies), len(wc3stats_lobbies), len(ent_ib_lobbies), len(ent_lobbies)
     ))
-    return wc3stats_ib_lobbies
+    return wc3stats_ib_lobbies + ent_ib_lobbies
 
 async def report_ib_lobbies(channel):
     global _open_lobbies, _wc3stats_down_message_id
