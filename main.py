@@ -104,6 +104,7 @@ _alive_instances = set()
 _master_instance = None
 _callbacks = []
 _message_hub = MessageHub()
+_is_master_timeout = True
 
 # DB
 _db_conn = sqlite3.connect(DB_FILE_PATH)
@@ -113,19 +114,18 @@ _db_cursor = _db_conn.cursor()
 _open_lobbies = set()
 _wc3stats_down_message_id = None
 
-class Timer:
+class TimedCallback:
     def __init__(self, t, func, *args, **kwargs):
         self._timeout = t
-        self._function = functools.partial(func, *args, **kwargs)
+        self.callback = functools.partial(func, *args, **kwargs)
         self._task = asyncio.ensure_future(self._job())
         
     async def _job(self):
         await asyncio.sleep(self._timeout)
-        await self._function()
+        await self.callback()
 
     def cancel(self):
         self._task.cancel()
-
 
 async def com(to_id, message_type, message = "", file = None):
     assert isinstance(to_id, int)
@@ -312,22 +312,28 @@ async def send_message(channel, *args, **kwargs):
     return message.id
 
 async def ensure_display_backup(func, *args, window=2, return_name=None, **kwargs):
-    global _master_instance, _alive_instances
+    global _master_instance, _alive_instances, _callbacks, _resolve_master_timeout
 
     logging.info("ensure_display_backup: old master {}, instances {}".format(_master_instance, _alive_instances))
-    # TODO we still want the backups to all execute, we just don't necessarily want to recalculate master
 
-    if _master_instance == None:
-        _alive_instances.remove(max(_alive_instances))
-    else:
-        _alive_instances.remove(_master_instance)
-        _master_instance = None
+    if _is_master_timeout:
+        if _master_instance == None:
+            _alive_instances.remove(max(_alive_instances))
+        else:
+            _alive_instances.remove(_master_instance)
+            _master_instance = None
 
-    _alive_instances.add(params.BOT_ID) # temporary fix for above TODO problem
-    if max(_alive_instances) == params.BOT_ID:
-        await self_promote()
+        if max(_alive_instances) == params.BOT_ID:
+            await self_promote()
+
+    # Other active callbacks just need to execute, but not resolve master's timeout
+    _is_master_timeout = False
+    for callback in _callbacks:
+        callback.cancel()
+        await callback.callback()
 
     await ensure_display(func, *args, window=window, return_name=return_name, **kwargs)
+    _is_master_timeout = True
 
 async def ensure_display(func, *args, window=2, return_name=None, **kwargs):
     global _callbacks
@@ -353,7 +359,7 @@ async def ensure_display(func, *args, window=2, return_name=None, **kwargs):
         await com(-1, MessageType.ENSURE_DISPLAY, message)
     else:
         if not _message_hub.got_message(MessageType.ENSURE_DISPLAY, window):
-            _callbacks.append(Timer(window, ensure_display_backup, func, *args, window=window, return_name=return_name, **kwargs))
+            _callbacks.append(TimedCallback(window, ensure_display_backup, func, *args, window=window, return_name=return_name, **kwargs))
 
 @_client.command()
 async def ping(ctx):
@@ -421,7 +427,7 @@ async def on_ready():
 
     logging.info("Connecting to bot network...")
     await com(-1, MessageType.CONNECT, str(VERSION))
-    _callbacks.append(Timer(3, self_promote))
+    _callbacks.append(TimedCallback(3, self_promote))
 
 @_client.event
 async def on_message(message):
