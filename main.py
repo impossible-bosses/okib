@@ -235,6 +235,7 @@ async def parse_bot_com(from_id, message_type, message, attachment):
         else:
             # TODO outdated version
             pass
+        logging.info("After CONNECT message, instances {}".format(_alive_instances))
     elif message_type == MessageType.CONNECT_ACK:
         message_trim = message
         if message[-1] == "+":
@@ -247,6 +248,7 @@ async def parse_bot_com(from_id, message_type, message, attachment):
             _callbacks = []
         version = int(message_trim)
         _alive_instances.add(from_id)
+        logging.info("After CONNECT_ACK message, instances {}, master {}".format(_alive_instances, _master_instance))
     elif message_type == MessageType.LET_MASTER:
         if _im_master:
             logging.warning("I was unworthy :(")
@@ -546,8 +548,8 @@ class Lobby:
         return self.id
 
     def __str__(self):
-        return "[id={} name=\"{}\" server={} map=\"{}\" host={} slots={}/{} message_id={}]".format(
-            self.id, self.name, self.server, self.map, self.host, self.slots_taken, self.slots_total, self.get_message_id()
+        return "[id={} ent={} name=\"{}\" server={} map=\"{}\" host={} slots={}/{} message_id={}]".format(
+            self.id, self.is_ent, self.name, self.server, self.map, self.host, self.slots_taken, self.slots_total, self.get_message_id()
         )
 
     def is_ib(self):
@@ -699,30 +701,29 @@ async def report_ib_lobbies(channel):
 
         if should_update:
             message_id = lobby.get_message_id()
-            if message_id is None:
-                # TODO eh, what do we do here?
+            if message_id is not None:
+                message = None
+                try:
+                    message = await channel.fetch_message(message_id)
+                except Exception as e:
+                    logging.error("Error fetching message with ID {}, {}".format(message_id, e))
+                    traceback.print_exc()
+
+                if message is not None:
+                    try:
+                        message_info = lobby_latest.to_discord_message_info(still_open)
+                        if message_info is None:
+                            logging.info("Lobby skipped: {}".format(lobby_latest))
+                            continue
+                    except Exception as e:
+                        logging.error("Failed to get lobby as message info for \"{}\", {}".format(lobby_latest.name, e))
+                        traceback.print_exc()
+                        continue
+
+                    logging.info("Updating lobby (open={}): {}".format(still_open, lobby_latest))
+                    await ensure_display(message.edit, content=message_info["message"], embed=message_info["embed"], window=window)
+            else:
                 logging.error("Missing message ID for lobby {}".format(lobby))
-                continue
-
-            try:
-                message = await channel.fetch_message(message_id)
-            except Exception as e:
-                logging.error("Error fetching message with ID {}, {}".format(message_id, e))
-                traceback.print_exc()
-                continue
-
-            try:
-                message_info = lobby_latest.to_discord_message_info(still_open)
-                if message_info is None:
-                    logging.info("Lobby skipped: {}".format(lobby_latest))
-                    continue
-            except Exception as e:
-                logging.error("Failed to get lobby as message info for \"{}\", {}".format(lobby_latest.name, e))
-                traceback.print_exc()
-                continue
-
-            logging.info("Updating lobby (open={}): {}".format(still_open, lobby_latest))
-            await ensure_display(message.edit, embed=message_info["embed"], window=window)
 
         if not still_open:
             key = lobby.get_message_id_key()
