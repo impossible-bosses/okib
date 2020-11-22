@@ -315,18 +315,15 @@ async def ensure_display_backup(func, *args, window=2, return_name=None, **kwarg
     global _master_instance, _alive_instances
 
     logging.info("ensure_display_backup: old master {}, instances {}".format(_master_instance, _alive_instances))
-    # TODO not quite right. we still want the backups to all execute,
-    # we just don't necessarily want to recalculate master
-    for callback in _callbacks:
-        callback.cancel()
-    _callbacks = []
+    # TODO we still want the backups to all execute, we just don't necessarily want to recalculate master
 
     if _master_instance == None:
-        # TODO hmmm...
         _alive_instances.remove(max(_alive_instances))
     else:
         _alive_instances.remove(_master_instance)
         _master_instance = None
+
+    _alive_instances.add(params.BOT_ID) # temporary fix for above TODO problem
     if max(_alive_instances) == params.BOT_ID:
         await self_promote()
 
