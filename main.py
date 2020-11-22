@@ -923,7 +923,7 @@ class Lobby:
         elif version.counterfeit:
             mark = ":x:"
             message = ":warning: *WARNING: Counterfeit version* :warning:"
-        elif version.ent_only:
+        elif not self.is_ent and version.ent_only:
             mark = ":x:"
             message = ":warning: *WARNING: Incompatible version* :warning:"
         elif version.deprecated:
