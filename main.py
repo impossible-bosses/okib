@@ -660,7 +660,7 @@ async def get_ib_lobbies():
     return wc3stats_ib_lobbies | ent_ib_lobbies
 
 async def report_ib_lobbies(channel):
-    global _open_lobbies, _api_down_message_id
+    global _open_lobbies, _api_down_tries, _api_down_message_id
 
     window = LOBBY_REFRESH_RATE * 2
     try:
