@@ -11,7 +11,6 @@ import io
 import logging
 import os
 import pickle
-#import requests
 import sqlite3
 import sys
 import traceback
@@ -316,6 +315,10 @@ async def ensure_display_backup(func, *args, window=2, return_name=None, **kwarg
     global _master_instance, _alive_instances
 
     logging.info("ensure_display_backup: old master {}, instances {}".format(_master_instance, _alive_instances))
+    for callback in _callbacks:
+        callback.cancel()
+    _callbacks = []
+
     if _master_instance == None:
         # TODO hmmm...
         _alive_instances.remove(max(_alive_instances))
@@ -450,11 +453,12 @@ async def on_message(message):
 LOBBY_REFRESH_RATE = 5
 
 class MapVersion:
-    def __init__(self, file_name, ent_only = False, deprecated = False, counterfeit = False):
+    def __init__(self, file_name, ent_only=False, deprecated=False, counterfeit=False, slots=[8,11]):
         self.file_name = file_name
         self.ent_only = ent_only
         self.deprecated = deprecated
         self.counterfeit = counterfeit
+        self.slots = slots
 
 KNOWN_VERSIONS = [
     MapVersion("Impossible.Bosses.v1.10.5"),
@@ -561,9 +565,6 @@ class Lobby:
         COLOR_ENT = discord.Colour.from_rgb(0, 255, 255)
         COLOR_CLOSED = discord.Colour.from_rgb(255, 0, 0)
 
-        #if self.slots_total != 9 and self.slots_total != 12:
-        #    raise Exception("Expected 9 or 12 total players, not {}, for map file {}".format(self.slots_total, self.map))
-
         version = get_map_version(self.map)
         mark = ""
         message = ""
@@ -580,6 +581,16 @@ class Lobby:
             mark = ":x:"
             message = ":warning: *WARNING: Old map version* :warning:"
 
+        slots_taken = self.slots_taken
+        slots_total = self.slots_total
+        if not self.is_ent:
+            slots_taken -= 1
+            slots_total -= 1
+
+        if version != None:
+            if slots_total not in version.slots:
+                raise Exception("Invalid total slots {}, expected {}, for map file {}".format(self.slots_total, versions.slots, self.map))
+
         embed_title = self.map + "  " + mark
         description = "ENT" if self.is_ent else ""
         color = COLOR_ENT if self.is_ent else COLOR_BNET
@@ -587,7 +598,7 @@ class Lobby:
             description += "*started/unhosted*"
             color = COLOR_CLOSED
         host = self.host if len(self.host) > 0 else "---"
-        players_str = "{} / {}".format(self.slots_taken - 1, self.slots_total - 1)
+        players_str = "{} / {}".format(slots_taken, slots_total)
 
         embed = discord.Embed(title=embed_title, description=description, color=color)
         embed.add_field(name="Lobby Name", value=self.name, inline=False)
