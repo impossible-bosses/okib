@@ -567,7 +567,7 @@ class Lobby:
         version = get_map_version(self.map)
         mark = ""
         message = ""
-        if version == None:
+        if version is None:
             mark = ":question:"
             message = ":warning: *WARNING: Unknown map version* :warning:"
         elif version.counterfeit:
@@ -582,12 +582,13 @@ class Lobby:
 
         slots_taken = self.slots_taken
         slots_total = self.slots_total
-        if not self.is_ent:
-            # Not sure why, but IB bnet lobbies have 1 extra slot
-            slots_taken -= 1
-            slots_total -= 1
 
-        if version != None:
+        if version is not None:
+            if not self.is_ent:
+                # Not sure why, but IB bnet lobbies have 1 extra slot
+                slots_taken -= 1
+                slots_total -= 1
+
             if slots_total not in version.slots:
                 raise Exception("Invalid total slots {}, expected {}, for map file {}".format(self.slots_total, versions.slots, self.map))
 
