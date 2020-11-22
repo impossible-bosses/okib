@@ -457,45 +457,45 @@ class MapVersion:
         self.counterfeit = counterfeit
 
 KNOWN_VERSIONS = [
-    MapVersion("Impossible.Bosses.v1.10.5.w3x"),
-    MapVersion("Impossible.Bosses.v1.10.5-ent.w3x", ent_only=True),
-    MapVersion("Impossible.Bosses.v1.10.4-ent.w3x", ent_only=True, deprecated=True),
-    MapVersion("Impossible.Bosses.v1.10.3-ent.w3x", ent_only=True, deprecated=True),
-    MapVersion("Impossible.Bosses.v1.10.2-ent.w3x", ent_only=True, deprecated=True),
-    MapVersion("Impossible.Bosses.v1.10.1-ent.w3x", ent_only=True, deprecated=True),
+    MapVersion("Impossible.Bosses.v1.10.5"),
+    MapVersion("Impossible.Bosses.v1.10.5-ent", ent_only=True),
+    MapVersion("Impossible.Bosses.v1.10.4-ent", ent_only=True, deprecated=True),
+    MapVersion("Impossible.Bosses.v1.10.3-ent", ent_only=True, deprecated=True),
+    MapVersion("Impossible.Bosses.v1.10.2-ent", ent_only=True, deprecated=True),
+    MapVersion("Impossible.Bosses.v1.10.1-ent", ent_only=True, deprecated=True),
 
-    MapVersion("Impossible_BossesReforgedV1.09Test.w3x", deprecated=True),
-    MapVersion("ImpossibleBossesEnt1.09.w3x", ent_only=True, deprecated=True),
-    MapVersion("Impossible_BossesReforgedV1.09_UFWContinues.w3x", counterfeit=True),
-    MapVersion("Impossible_BossesReforgedV1.09UFW30.w3x", counterfeit=True),
-    MapVersion("Impossible_BossesReforgedV1.08Test.w3x", deprecated=True),
-    MapVersion("Impossible_BossesReforgedV1.07Test.w3x", deprecated=True),
-    MapVersion("Impossible_BossesTestversion1.06.w3x", deprecated=True),
-    MapVersion("Impossible_BossesReforgedV1.05.w3x", deprecated=True),
-    MapVersion("Impossible_BossesReforgedV1.02.w3x", deprecated=True),
+    MapVersion("Impossible_BossesReforgedV1.09Test", deprecated=True),
+    MapVersion("ImpossibleBossesEnt1.09", ent_only=True, deprecated=True),
+    MapVersion("Impossible_BossesReforgedV1.09_UFWContinues", counterfeit=True),
+    MapVersion("Impossible_BossesReforgedV1.09UFW30", counterfeit=True),
+    MapVersion("Impossible_BossesReforgedV1.08Test", deprecated=True),
+    MapVersion("Impossible_BossesReforgedV1.07Test", deprecated=True),
+    MapVersion("Impossible_BossesTestversion1.06", deprecated=True),
+    MapVersion("Impossible_BossesReforgedV1.05", deprecated=True),
+    MapVersion("Impossible_BossesReforgedV1.02", deprecated=True),
 
-    MapVersion("Impossible Bosses BetaV3V.w3x", deprecated=True),
-    MapVersion("Impossible Bosses BetaV3R.w3x", deprecated=True),
-    MapVersion("Impossible Bosses BetaV3P.w3x", deprecated=True),
-    MapVersion("Impossible Bosses BetaV3E.w3x", deprecated=True),
-    MapVersion("Impossible Bosses BetaV3C.w3x", deprecated=True),
-    MapVersion("Impossible Bosses BetaV3A.w3x", deprecated=True),
-    MapVersion("Impossible Bosses BetaV2X.w3x", deprecated=True),
-    MapVersion("Impossible Bosses BetaV2W.w3x", deprecated=True),
-    MapVersion("Impossible Bosses BetaV2S.w3x", deprecated=True),
-    MapVersion("Impossible Bosses BetaV2J.w3x", deprecated=True),
-    MapVersion("Impossible Bosses BetaV2F.w3x", deprecated=True),
-    MapVersion("Impossible Bosses BetaV2E.w3x", deprecated=True),
-    MapVersion("Impossible Bosses BetaV2D.w3x", deprecated=True),
-    MapVersion("Impossible Bosses BetaV2C.w3x", deprecated=True),
-    MapVersion("Impossible Bosses BetaV2A.w3x", deprecated=True),
-    MapVersion("Impossible Bosses BetaV1Y.w3x", deprecated=True),
-    MapVersion("Impossible Bosses BetaV1X.w3x", deprecated=True),
-    MapVersion("Impossible Bosses BetaV1W.w3x", deprecated=True),
-    MapVersion("Impossible Bosses BetaV1V.w3x", deprecated=True),
-    MapVersion("Impossible Bosses BetaV1R.w3x", deprecated=True),
-    MapVersion("Impossible Bosses BetaV1P.w3x", deprecated=True),
-    MapVersion("Impossible Bosses BetaV1C.w3x", deprecated=True),
+    MapVersion("Impossible Bosses BetaV3V", deprecated=True),
+    MapVersion("Impossible Bosses BetaV3R", deprecated=True),
+    MapVersion("Impossible Bosses BetaV3P", deprecated=True),
+    MapVersion("Impossible Bosses BetaV3E", deprecated=True),
+    MapVersion("Impossible Bosses BetaV3C", deprecated=True),
+    MapVersion("Impossible Bosses BetaV3A", deprecated=True),
+    MapVersion("Impossible Bosses BetaV2X", deprecated=True),
+    MapVersion("Impossible Bosses BetaV2W", deprecated=True),
+    MapVersion("Impossible Bosses BetaV2S", deprecated=True),
+    MapVersion("Impossible Bosses BetaV2J", deprecated=True),
+    MapVersion("Impossible Bosses BetaV2F", deprecated=True),
+    MapVersion("Impossible Bosses BetaV2E", deprecated=True),
+    MapVersion("Impossible Bosses BetaV2D", deprecated=True),
+    MapVersion("Impossible Bosses BetaV2C", deprecated=True),
+    MapVersion("Impossible Bosses BetaV2A", deprecated=True),
+    MapVersion("Impossible Bosses BetaV1Y", deprecated=True),
+    MapVersion("Impossible Bosses BetaV1X", deprecated=True),
+    MapVersion("Impossible Bosses BetaV1W", deprecated=True),
+    MapVersion("Impossible Bosses BetaV1V", deprecated=True),
+    MapVersion("Impossible Bosses BetaV1R", deprecated=True),
+    MapVersion("Impossible Bosses BetaV1P", deprecated=True),
+    MapVersion("Impossible Bosses BetaV1C", deprecated=True),
 ]
 
 def get_map_version(map_file):
@@ -513,18 +513,20 @@ class Lobby:
         self.map = lobby_dict["map"]
         self.host = lobby_dict["host"]
 
-        if not is_ent:
-            self.server = lobby_dict["server"]
-            self.slots_taken = lobby_dict["slotsTaken"]
-            self.slots_total = lobby_dict["slotsTotal"]
-            self.created = lobby_dict["created"]
-            self.last_updated = lobby_dict["lastUpdated"]
-        else:
+        if is_ent:
             self.server = lobby_dict["location"]
             self.slots_taken = lobby_dict["slots_taken"]
             self.slots_total = lobby_dict["slots_total"]
             self.created = None
             self.last_updated = None
+        else:
+            if self.map[-4:] == ".w3x":
+                self.map = self.map[:-4]
+            self.server = lobby_dict["server"]
+            self.slots_taken = lobby_dict["slotsTaken"]
+            self.slots_total = lobby_dict["slotsTotal"]
+            self.created = lobby_dict["created"]
+            self.last_updated = lobby_dict["lastUpdated"]
 
     def __eq__(self, other):
         return self.id == other.id
@@ -555,11 +557,10 @@ class Lobby:
         return self.name != new.name or self.server != new.server or self.map != new.map or self.host != new.host or self.slots_taken != new.slots_taken or self.slots_total != new.slots_total
 
     def to_discord_message_info(self, open=True):
-        COLOR_OPEN = discord.Colour.from_rgb(0, 255, 0)
+        COLOR_BNET = discord.Colour.from_rgb(0, 255, 0)
+        COLOR_ENT = discord.Colour.from_rgb(0, 255, 255)
         COLOR_CLOSED = discord.Colour.from_rgb(255, 0, 0)
 
-        if self.map[-4:] != ".w3x":
-            raise Exception("Bad map file: {}".format(self.map))
         #if self.slots_total != 9 and self.slots_total != 12:
         #    raise Exception("Expected 9 or 12 total players, not {}, for map file {}".format(self.slots_total, self.map))
 
@@ -579,17 +580,19 @@ class Lobby:
             mark = ":x:"
             message = ":warning: *WARNING: Old map version* :warning:"
 
+        embed_title = self.map + "  " + mark
         description = "ENT" if self.is_ent else ""
+        color = COLOR_ENT if self.is_ent else COLOR_BNET
         if not open:
             description += "*started/unhosted*"
-        color = COLOR_OPEN if open else COLOR_CLOSED
-        embed_title = self.map[:-4] + "  " + mark
+            color = COLOR_CLOSED
+        host = self.host if len(self.host) > 0 else "---"
+        players_str = "{} / {}".format(self.slots_taken - 1, self.slots_total - 1)
 
         embed = discord.Embed(title=embed_title, description=description, color=color)
         embed.add_field(name="Lobby Name", value=self.name, inline=False)
-        embed.add_field(name="Host", value=self.host, inline=True)
+        embed.add_field(name="Host", value=host, inline=True)
         embed.add_field(name="Server", value=self.server, inline=True)
-        players_str = "{} / {}".format(self.slots_taken - 1, self.slots_total - 1)
         embed.add_field(name="Players", value=players_str, inline=True)
 
         return {
@@ -628,7 +631,7 @@ async def get_ib_lobbies():
     logging.info("IB lobbies: {}/{} from wc3stats, {}/{} from ENT".format(
         len(wc3stats_ib_lobbies), len(wc3stats_lobbies), len(ent_ib_lobbies), len(ent_lobbies)
     ))
-    return wc3stats_ib_lobbies + ent_ib_lobbies
+    return wc3stats_ib_lobbies | ent_ib_lobbies
 
 async def report_ib_lobbies(channel):
     global _open_lobbies, _wc3stats_down_message_id
