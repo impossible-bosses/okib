@@ -85,8 +85,8 @@ class MessageHub:
         return len(messages_in_window) > 0
 
 # constants
-DB_FILE_PATH = os.path.join(ROOT_DIR, "IBCE.db")
-DB_ARCHIVE_PATH = os.path.join(ROOT_DIR, "archive", "IBCE.db")
+DB_FILE_PATH = os.path.join(ROOT_DIR, "IBCE_WARN.db")
+DB_ARCHIVE_PATH = os.path.join(ROOT_DIR, "archive", "IBCE_WARN.db")
 VERSION = get_source_version()
 print("Source version {}".format(VERSION))
 
@@ -105,10 +105,6 @@ _master_instance = None
 _callbacks = []
 _message_hub = MessageHub()
 _is_master_timeout = True
-
-# DB
-_db_conn = sqlite3.connect(DB_FILE_PATH)
-_db_cursor = _db_conn.cursor()
 
 # globals / workspace
 _open_lobbies = set()
@@ -145,9 +141,6 @@ async def com(to_id, message_type, message = "", file = None):
         await _com_channel.send(payload, file=file)
 
 def archive_db():
-    global _db_conn
-
-    _db_conn.close()
     try:
         os.mkdir(os.path.dirname(DB_ARCHIVE_PATH))
     except FileExistsError:
@@ -155,14 +148,9 @@ def archive_db():
     os.replace(DB_FILE_PATH, DB_ARCHIVE_PATH)
 
 async def update_db(db_bytes):
-    global _db_conn
-
     archive_db()
     with open(DB_FILE_PATH, "wb") as f:
         f.write(db_bytes)
-
-    _db_conn = sqlite3.connect(DB_FILE_PATH)
-    _db_cursor = _db_conn.cursor()
 
 async def send_db(to_id):
     with open(DB_FILE_PATH, "rb") as f:
@@ -472,7 +460,7 @@ noib_reaction = None
 OKIB_emote = None
 NOIB_emote = None
 OKIB_1 = None
-NO_POWER_MSG = "You do not have enough power to perform such an action"
+NO_POWER_MSG = "You do not have enough power to perform such an action."
 okib_emoji_id = 506072066039087164 # ok
 okib_emoji_string = '<:okib:' + str(okib_emoji_id)+ '>'
 noib_emoji_id = 477544228629512193 # ok
@@ -771,7 +759,7 @@ async def on_member_update(before, after):
                 await shaman_promote(after)
 
 def nonquery(query):
-    conn = sqlite3.connect("IBCE_WARN.db")
+    conn = sqlite3.connect(DB_FILE_PATH)
     cursor = conn.cursor()
     cursor.execute(query)
     conn.commit()
@@ -794,7 +782,7 @@ async def pedigree(ctx):
         await ensure_display(ctx.message.channel.send, NO_POWER_MSG)
         return
 
-    conn = sqlite3.connect("IBCE_WARN.db")
+    conn = sqlite3.connect(DB_FILE_PATH)
     cursor = conn.cursor()
     for user in ctx.message.mentions:
         sqlquery = "SELECT player_id,Reason,Datetime,Warner FROM Events WHERE Event_type = 666 AND Player_id = " + str(user.id)
