@@ -507,6 +507,7 @@ def get_map_version(map_file):
 
 class Lobby:
     def __init__(self, lobby_dict, is_ent):
+        self.is_ent = is_ent
         self.id = lobby_dict["id"]
         self.name = lobby_dict["name"]
         self.map = lobby_dict["map"]
