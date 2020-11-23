@@ -472,6 +472,17 @@ async def on_message(message):
                 attachment = message.attachments[0]
             await parse_bot_com(from_id, message_type, content, attachment)
     else:
+        if message.content == "!getgames":
+            is_ent_channel = None
+            if message.channel == _ent_channel:
+                is_ent_channel = True
+            elif message.channel == _pub_channel:
+                is_ent_channel = False
+            if is_ent_channel is not None:
+                await ensure_display(message.delete)
+                await do_getgames(is_ent_channel)
+                return
+
         await _client.process_commands(message)
 
 # ==== OKIB ========================================================================================
@@ -1050,17 +1061,9 @@ async def report_ib_lobbies(pub_channel, ent_channel):
 
             _open_lobbies.add(lobby)
 
-@_client.command()
-async def getgames(ctx):
+# TODO temporary, to support "!getgames"
+async def do_getgames(is_ent_channel):
     global _open_lobbies
-
-    if ctx.channel == _ent_channel:
-        is_ent_channel = True
-    elif ctx.channel == _pub_channel:
-        is_ent_channel = False
-    else:
-        return
-    await ensure_display(ctx.message.delete)
 
     async with _update_lobbies_lock:
         # Clear all posted messages for open lobbies and trigger a refresh
@@ -1085,6 +1088,18 @@ async def getgames(ctx):
 
         _open_lobbies = [lobby for lobby in _open_lobbies if lobby.is_ent != is_ent_channel]
         await report_ib_lobbies(_pub_channel, _ent_channel)
+
+@_client.command()
+async def getgames(ctx):
+    if ctx.channel == _ent_channel:
+        is_ent_channel = True
+    elif ctx.channel == _pub_channel:
+        is_ent_channel = False
+    else:
+        return
+    await ensure_display(ctx.message.delete)
+
+    await do_getgames(is_ent_channel)
 
 @loop(seconds=LOBBY_REFRESH_RATE)
 async def refresh_ib_lobbies():
