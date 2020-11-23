@@ -111,7 +111,6 @@ _is_master_timeout = True
 # globals / workspace
 _open_lobbies = set()
 _api_down_tries = 0
-_api_down_message_id = None
 
 class TimedCallback:
     def __init__(self, t, func, *args, **kwargs):
@@ -159,7 +158,7 @@ async def send_db(to_id):
         await com(to_id, MessageType.SEND_DB, "", discord.File(f))
 
 def update_workspace(workspace_bytes):
-    global _open_lobbies, _api_down_message_id
+    global _open_lobbies
 
     workspace_obj = pickle.loads(workspace_bytes)
     logging.info("Updating workspace: {}".format(workspace_obj))
@@ -167,7 +166,6 @@ def update_workspace(workspace_bytes):
     _open_lobbies = workspace_obj["open_lobbies"]
     for key, value in workspace_obj["lobby_message_ids"].items():
         globals()[key] = value
-    _api_down_message_id = workspace_obj["api_down_message_id"]
 
 async def send_workspace(to_id):
     lobby_message_ids = {}
@@ -177,8 +175,7 @@ async def send_workspace(to_id):
 
     workspace_obj = {
         "open_lobbies": _open_lobbies,
-        "lobby_message_ids": lobby_message_ids,
-        "api_down_message_id": _api_down_message_id
+        "lobby_message_ids": lobby_message_ids
     }
     logging.info("Sending workspace: {}".format(workspace_obj))
 
@@ -351,6 +348,7 @@ async def ensure_display(func, *args, window=2, return_name=None, **kwargs):
 
         await com(-1, MessageType.ENSURE_DISPLAY, message)
     else:
+        # TODO: if return_name isn't None, we have to pass it into got_message to make sure we got the return value from master
         if not _message_hub.got_message(MessageType.ENSURE_DISPLAY, window):
             _callbacks.append(TimedCallback(window, ensure_display_backup, func, *args, window=window, return_name=return_name, **kwargs))
 
@@ -419,6 +417,7 @@ async def on_ready():
     _guild = guild_ib
     _pub_channel = channel_pub
     logging.info("Bot \"{}\" connected to Discord on guild \"{}\", pub channel \"{}\"".format(_client.user, guild_ib.name, channel_pub.name))
+    await _client.change_presence(activity=None)
 
     _com_channel = channel_com
 
@@ -727,8 +726,6 @@ async def shaman_promote(member):
 
 @_client.event
 async def on_member_update(before, after):
-    logging.info("on_member_update, before={} after={}".format(before, after))
-
     if before.guild == _guild:
         #promoted
         if before.roles[len(before.roles)-1] < _guild.get_role(shaman_id) and before.roles[len(before.roles)-1] > _guild.get_role(peon_id):
@@ -1002,7 +999,7 @@ async def get_ib_lobbies():
     return wc3stats_ib_lobbies | ent_ib_lobbies
 
 async def report_ib_lobbies(channel):
-    global _open_lobbies, _api_down_tries, _api_down_message_id
+    global _open_lobbies, _api_down_tries
 
     window = LOBBY_REFRESH_RATE * 2
     try:
@@ -1012,21 +1009,16 @@ async def report_ib_lobbies(channel):
         traceback.print_exc()
 
         _api_down_tries += 1
-        if _api_down_tries > QUERY_RETRIES_BEFORE_WARNING and _api_down_message_id is None:
-            await ensure_display(send_message, channel, ":warning: WARNING: https://wc3stats.com/gamelist API down, no lobby list :warning:", window=window, return_name="_api_down_message_id")
+        if _api_down_tries > QUERY_RETRIES_BEFORE_WARNING:
+            await _client.change_presence(activity=discord.Activity(
+                type=discord.ActivityType.listening,
+                name="failed lobby APIs (no data)")
+            )
         return
 
-    if _api_down_message_id is not None:
-        message = None
-        try:
-            message = await channel.fetch_message(_api_down_message_id)
-        except Exception as e:
-            pass
-
+    if _api_down_tries > 0:
         _api_down_tries = 0
-        _api_down_message_id = None
-        if message is not None:
-            await ensure_display(message.delete, window=window)
+        await _client.change_presence(activity=None)
 
     new_open_lobbies = set()
     for lobby in _open_lobbies:
