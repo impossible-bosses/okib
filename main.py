@@ -556,14 +556,14 @@ async def okib(ctx, arg=None):
 
     adv = False
     if ctx.message.author.roles[-1] <= _guild.get_role(params.PEON_ID):
-        await ensure_display(ctx.message.channel.send, NO_POWER_MSG)
+        await ensure_display(ctx.channel.send, NO_POWER_MSG)
         return
     if ctx.message.author.roles[-1] >= _guild.get_role(params.SHAMAN_ID) or ctx.message.author == _gatherer:
         adv = True
     if adv == False and arg != None:
-        await ensure_display(ctx.message.channel.send, NO_POWER_MSG)
+        await ensure_display(ctx.channel.send, NO_POWER_MSG)
         return
-    await ctx.message.delete()
+    await ensure_display(ctx.message.delete)
 
     if _okib_channel is None:
         _gatherer = ctx.message.author
@@ -576,7 +576,7 @@ async def okib(ctx, arg=None):
             _okib_members = []
             _noib_members = []
 
-        _okib_channel = ctx.message.channel
+        _okib_channel = ctx.channel
         _okib_list_message_id = (await ctx.send(OKIB_EMOJI_STRING +' : \n' + NOIB_EMOJI_STRING +' : ' )).id
         _okib_message_id = (await ctx.send(OKIB_GATHER_EMOJI_STRING)).id
         _okib_list_message = await _okib_channel.fetch_message(_okib_list_message_id)
@@ -606,11 +606,11 @@ async def noib(ctx):
     global _okib_message
 
     if ctx.message.author.roles[-1] <= _guild.get_role(params.PEON_ID):
-        await ensure_display(ctx.message.channel.send, NO_POWER_MSG)
+        await ensure_display(ctx.channel.send, NO_POWER_MSG)
         return
     if ctx.message.author.roles[-1] < _guild.get_role(params.SHAMAN_ID) and ctx.message.author != _gatherer:
         if datetime.datetime.now() < (_gather_time + datetime.timedelta(hours=2)):
-            await ensure_display(ctx.message.channel.send, NO_POWER_MSG)
+            await ensure_display(ctx.channel.send, NO_POWER_MSG)
             return
         pass
 
@@ -728,18 +728,18 @@ def nonquery(query):
 @_client.command()
 async def warn(ctx, arg1, *, arg2=""):
     if ctx.message.author.roles[-1] < _guild.get_role(params.SHAMAN_ID):
-        await ensure_display(ctx.message.channel.send, NO_POWER_MSG)
+        await ensure_display(ctx.channel.send, NO_POWER_MSG)
         return
 
     for user in ctx.message.mentions:
         sqlquery = "INSERT INTO Events (Event_type,Player_id,Reason,Datetime,Warner) VALUES (666,{},\"{}\",\"{}\",\"{}\")".format(user.id, arg2, datetime.datetime.now(), ctx.message.author.display_name)
         nonquery(sqlquery)
-        await ensure_display(ctx.message.channel.send, "User <@!{}> has been warned !".format(user.id))
+        await ensure_display(ctx.channel.send, "User <@!{}> has been warned !".format(user.id))
         
 @_client.command()
 async def pedigree(ctx):
     if ctx.message.author.roles[-1] < _guild.get_role(params.PEON_ID):
-        await ensure_display(ctx.message.channel.send, NO_POWER_MSG)
+        await ensure_display(ctx.channel.send, NO_POWER_MSG)
         return
 
     conn = sqlite3.connect(DB_FILE_PATH)
@@ -749,10 +749,10 @@ async def pedigree(ctx):
         cursor.execute(sqlquery)
         row = cursor.fetchone()
         if row is None:
-            await ensure_display(ctx.message.channel.send, "User <@!{}> has never been warned yet !".format(user.id))
+            await ensure_display(ctx.channel.send, "User <@!{}> has never been warned yet !".format(user.id))
         else:
             while row:
-                await ensure_display(ctx.message.channel.send, "{} => User <@!{}> has been warned by {} for the following reason:\n{}".format(row[2], row[0], row[3], row[1]))
+                await ensure_display(ctx.channel.send, "{} => User <@!{}> has been warned by {} for the following reason:\n{}".format(row[2], row[0], row[3], row[1]))
                 row = cursor.fetchone()
     conn.close()
 
@@ -760,6 +760,8 @@ async def pedigree(ctx):
 
 LOBBY_REFRESH_RATE = 5
 QUERY_RETRIES_BEFORE_WARNING = 10
+
+_update_lobbies_lock = asyncio.Lock()
 
 class MapVersion:
     def __init__(self, file_name, ent_only=False, deprecated=False, counterfeit=False, slots=[8,11]):
@@ -1048,17 +1050,54 @@ async def report_ib_lobbies(pub_channel, ent_channel):
 
             _open_lobbies.add(lobby)
 
+@_client.command()
+async def getgames(ctx):
+    global _open_lobbies
+
+    if ctx.channel == _ent_channel:
+        is_ent_channel = True
+    elif ctx.channel == _pub_channel:
+        is_ent_channel = False
+    else:
+        return
+    await ensure_display(ctx.message.delete)
+
+    async with _update_lobbies_lock:
+        # Clear all posted messages for open lobbies and trigger a refresh
+        for lobby in _open_lobbies:
+            if lobby.is_ent != is_ent_channel:
+                continue
+
+            message_id = lobby.get_message_id()
+            if message_id is not None:
+                message = None
+                try:
+                    message = await ctx.channel.fetch_message(message_id)
+                except Exception as e:
+                    logging.error("Error fetching message with ID {}, {}".format(message_id, e))
+                    traceback.print_exc()
+
+                if message is not None:
+                    await ensure_display(message.delete)
+            key = lobby.get_message_id_key()
+            if key in globals():
+                del globals()[key]
+
+        _open_lobbies = [lobby for lobby in _open_lobbies if lobby.is_ent != is_ent_channel]
+        await report_ib_lobbies(_pub_channel, _ent_channel)
+
 @loop(seconds=LOBBY_REFRESH_RATE)
 async def refresh_ib_lobbies():
     if not _initialized:
         return
 
     logging.info("Refreshing lobby list")
-    try:
-        await report_ib_lobbies(_pub_channel, _ent_channel)
-    except Exception as e:
-        logging.error("Exception in report_ib_lobbies, {}".format(e))
-        traceback.print_exc()
+    async with _update_lobbies_lock:
+        try:
+            await report_ib_lobbies(_pub_channel, _ent_channel)
+        except Exception as e:
+            logging.error("Exception in report_ib_lobbies, {}".format(e))
+            traceback.print_exc()
 
 # ==== MAIN ========================================================================================
 
