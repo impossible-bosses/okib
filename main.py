@@ -493,86 +493,28 @@ _gathered = False
 _gather_time = datetime.datetime.now()
 
 async def gather():
-    gatherstring = ""
-    for member in _okib_members:
-        gatherstring = gatherstring + " " + member.mention
-
-    await ensure_display(_okib_channel.send, gatherstring + " Time to play !\n" + OKIB_EMOJI_STRING)
-    # TODO 2 lines, big emojis
-    # await _okib_channel.send(gatherstring + " Time to play !")
-    # await _okib_channel.send(OKIB_EMOJI_STRING)
-
-def get_okib_list():
-    if len(_okib_members) == 0:
-        return ""
-    if len(_okib_members) == 1:
-        if _okib_members[0].nick is not None:
-            okiblist = _okib_members[0].nick
-        else:
-            okiblist = _okib_members[0].name
-    else :
-        first = True
-        okiblist = ''
-        for member in _okib_members:
-            if first == True:
-                if member.nick is not None:
-                    okiblist = okiblist + member.nick
-                else:
-                    okiblist = okiblist + member.name
-                first = False
-            else:
-                if member.nick is not None:
-                    okiblist = okiblist + ', ' + member.nick
-                else:
-                    okiblist = okiblist + ', ' + member.name
-    return okiblist
-
-def get_noib_list():
-    if len(_noib_members) == 0:
-        return ""
-    if len(_noib_members) == 1:
-        if _noib_members[0].nick is not None:
-            noiblist = _noib_members[0].nick
-        else:
-            noiblist = _noib_members[0].name
-    else:
-        first = True
-        noiblist = ''
-        for member in _noib_members:
-            if first == True:
-                if member.nick is not None:
-                    noiblist = noiblist + member.nick
-                else:
-                    noiblist = noiblist + member.name
-                first = False
-            else:
-                if member.nick is not None:
-                    noiblist = noiblist + ', ' + member.nick
-                else:
-                    noiblist = noiblist + ', ' + member.name
-    return noiblist
-
-async def check8():
-    global _gathered
-    if len(_okib_members) == 8 and not _gathered:
-        _gathered = True
-        await gather()
-
-async def check7():
-    global _gathered
-    if len(_okib_members) == 7 and _gathered:
-        _gathered = False
+    gather_list_string = " ".join([member.mention for member in _okib_members])
+    # TODO combine these?
+    await ensure_display(_okib_channel.send, gather_list_string + " Time to play!")
+    await ensure_display(_okib_channel.send, OKIB_EMOJI_STRING)
 
 async def list_update():
-    if _gatherer.nick is not None:
-        g = _gatherer.nick
-    else:
-        g = _gatherer.name
+    global _gathered
 
-    list_content = g + " asks : \n" + OKIB_EMOJI_STRING  + " " + str(len(_okib_members)) + "/8 : " + get_okib_list() + '\n' + NOIB_EMOJI_STRING  + " : " + get_noib_list()
+    okib_list_string = ", ".join([member.display_name for member in _okib_members])
+    noib_list_string = ", ".join([member.display_name for member in _noib_members])
+    list_content = "{} asks:\n{} {}/8 : {}\n{} : {}".format(
+        _gatherer.display_name,
+        OKIB_EMOJI_STRING, len(_okib_members), okib_list_string,
+        NOIB_EMOJI_STRING, noib_list_string
+    )
     await ensure_display(_okib_list_message.edit, content=list_content)
-    await check8()
-    await check7()
+
+    if len(_okib_members) >= 8 and not _gathered:
+        _gathered = True
+        await gather()
+    if len(_okib_members) < 8 and _gathered:
+        _gathered = False
 
 async def up(ctx):
     global _okib_list_message
@@ -615,7 +557,6 @@ async def okib(ctx, arg=None):
         await ensure_display(ctx.message.channel.send, NO_POWER_MSG)
         return
     await ctx.message.delete()
-
 
     if _okib_channel is None:
         _gatherer = ctx.message.author
@@ -1026,7 +967,7 @@ async def report_ib_lobbies(channel):
         if _api_down_tries > QUERY_RETRIES_BEFORE_WARNING:
             await _client.change_presence(activity=discord.Activity(
                 type=discord.ActivityType.listening,
-                name="failed lobby APIs (no data)")
+                name="bad lobby APIs (no data)")
             )
         return
 
