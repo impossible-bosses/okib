@@ -564,8 +564,6 @@ async def check7():
         _gathered = False
 
 async def list_update():
-    global _gatherer
-
     if _gatherer.nick is not None:
         g = _gatherer.nick
     else:
@@ -577,7 +575,6 @@ async def list_update():
     await check7()
 
 async def up(ctx):
-    global _okib_channel
     global _okib_list_message
     global _okib_message
     global _okib_list_message_id
@@ -608,7 +605,6 @@ async def okib(ctx, arg=None):
     global _gathered
     global _gather_time
 
-    logging.info("okib")
     adv = False
     if ctx.message.author.roles[len(ctx.message.author.roles) - 1] <= _guild.get_role(PEON_ID):
         await ensure_display(ctx.message.channel.send, NO_POWER_MSG)
