@@ -74,7 +74,7 @@ class MessageHub:
                 m for m in self._message_queues[message_type] if m.timestamp > timestamp_cutoff
             ]
 
-    def got_message(self, message_type, window_seconds):
+    def got_message(self, message_type, window_seconds, return_name=None):
         assert isinstance(message_type, MessageType)
         assert message_type in self._message_queues
 
@@ -82,7 +82,16 @@ class MessageHub:
         messages_in_window = [
             m for m in self._message_queues[message_type] if m.timestamp > timestamp_cutoff
         ]
-        return len(messages_in_window) > 0
+        if return_name is None:
+            return len(messages_in_window) > 0
+        else:
+            assert message_type == MessageType.ENSURE_DISPLAY
+            for message in messages_in_window:
+                if message != "":
+                    kv = parse_ensure_display_value(message)
+                    if kv[0] == return_name:
+                        return True
+            return False
 
 # constants
 DB_FILE_PATH = os.path.join(ROOT_DIR, "IBCE_WARN.db")
@@ -202,6 +211,23 @@ def update_source_and_reset():
                 logging.info("Exiting")
                 exit()
 
+def parse_ensure_display_value(message):
+    kv = message.split("=")
+    value = None
+    if len(kv[1]) > 0:
+        data_type = kv[1][0]
+        value_str = kv[1][1:]
+        if data_type == "f":
+            value = float(value_str)
+        elif data_type == "i":
+            value = int(value_str)
+        elif data_type == "s":
+            value = value_str
+        else:
+            raise ValueError("Unhandled return type {}".format(data_type))
+
+    return (kv[0], value)
+
 async def parse_bot_com(from_id, message_type, message, attachment):
     global _initialized
     global _im_master
@@ -253,20 +279,8 @@ async def parse_bot_com(from_id, message_type, message, attachment):
             callback.cancel()
         _callbacks = []
         if message != "":
-            kv = message.split("=")
-            value = None
-            if len(kv[1]) > 0:
-                data_type = kv[1][0]
-                value_str = kv[1][1:]
-                if data_type == "f":
-                    value = float(value_str)
-                elif data_type == "i":
-                    value = int(value_str)
-                elif data_type == "s":
-                    value = value_str
-                else:
-                    raise ValueError("Unhandled return type {}".format(data_type))
-            globals()[kv[0]] = value
+            kv = parse_ensure_display_value(message)
+            globals()[kv[0]] = kv[1]
         if from_id != _master_instance:
             _alive_instances.remove(_master_instance)
             _master_instance = from_id
@@ -360,8 +374,10 @@ async def ensure_display(func, *args, window=2, return_name=None, **kwargs):
 
         await com(-1, MessageType.ENSURE_DISPLAY, message)
     else:
-        # TODO: if return_name isn't None, we have to pass it into got_message to make sure we got the return value from master
-        if not _message_hub.got_message(MessageType.ENSURE_DISPLAY, window):
+        # Only create a backup callback if no ENSURE_DISPLAY messages have been seen for the given
+        # timeout window. If a return_name is given, we require previous messages to have
+        # that return name as well.
+        if not _message_hub.got_message(MessageType.ENSURE_DISPLAY, window, return_name):
             _callbacks.append(TimedCallback(window, ensure_display_backup, func, *args, window=window, return_name=return_name, **kwargs))
 
 @_client.command()
@@ -390,7 +406,6 @@ async def update(ctx, bot_id):  # TODO default bot_id=None ??
             _master_instance = None
             if max(_alive_instances) == params.BOT_ID:
                 await self_promote()
-
 
 @_client.event
 async def on_ready():
@@ -443,7 +458,6 @@ async def on_ready():
     _noib_emote = _client.get_emoji(NOIB_EMOJI_ID)
     logging.info("Bot \"{}\" connected to Discord on guild \"{}\", pub channel \"{}\"".format(_client.user, guild_ib.name, channel_pub.name))
     await _client.change_presence(activity=None)
-
     _com_channel = channel_com
 
     logging.info("Connecting to bot network...")
@@ -472,6 +486,7 @@ async def on_message(message):
                 attachment = message.attachments[0]
             await parse_bot_com(from_id, message_type, content, attachment)
     else:
+        # TODO temporary
         if message.content == "!getgames":
             is_ent_channel = None
             if message.channel == _ent_channel:
@@ -828,8 +843,32 @@ def get_map_version(map_file):
     for version in KNOWN_VERSIONS:
         if map_file == version.file_name:
             return version
-
     return None
+
+def get_map_server_nice(server):
+    if server == "usw":
+        return ":flag_us: US"
+    elif server == "eu":
+        return ":flag_eu: EU"
+    elif server == "kr":
+        return ":flag_kr: KR"
+    elif server == "Montreal":
+        return ":flag_ca: Montreal"
+    elif server == "New York":
+        return ":flag_us: New York"
+    elif server == "France":
+        return ":flag_fr: France"
+    elif server == "Amsterdam":
+        return ":flag_nl: Amsterdam"
+    return server
+
+def get_subscribers_string(subscribers):
+    string = ""
+    for i in range(0, len(subscribers), 4):
+        if i != 0:
+            string += "\n"
+        string += ", ".join(subscribers[i:i+4])
+    return string
 
 class Lobby:
     def __init__(self, lobby_dict, is_ent):
@@ -838,6 +877,7 @@ class Lobby:
         self.name = lobby_dict["name"]
         self.map = lobby_dict["map"]
         self.host = lobby_dict["host"]
+        self.subscribers = [] # TODO use this
 
         if is_ent:
             self.server = lobby_dict["location"]
@@ -879,9 +919,7 @@ class Lobby:
         return self.name != new.name or self.server != new.server or self.map != new.map or self.host != new.host or self.slots_taken != new.slots_taken or self.slots_total != new.slots_total
 
     def to_discord_message_info(self, open=True):
-        COLOR_BNET = discord.Colour.from_rgb(0, 255, 0)
-        COLOR_ENT = discord.Colour.from_rgb(0, 255, 255)
-        COLOR_CLOSED = discord.Colour.from_rgb(255, 0, 0)
+        COLOR_CLOSED = discord.Colour(0x8a0808)
 
         version = get_map_version(self.map)
         mark = ""
@@ -916,20 +954,29 @@ class Lobby:
             if slots_total not in version.slots:
                 raise Exception("Invalid total slots {}, expected {}, for map file {}".format(self.slots_total, versions.slots, self.map))
 
-        embed_title = self.map + "  " + mark
-        description = "ENT" if self.is_ent else ""
-        color = COLOR_ENT if self.is_ent else COLOR_BNET
+        title_format = "{} ({}/{})"
+        description_format = "{} {}"
         if not open:
-            description += " *started/unhosted*"
-            color = COLOR_CLOSED
-        host = self.host if len(self.host) > 0 else "---"
-        players_str = "{} / {}".format(slots_taken, slots_total)
+            title_format = "~~{}~~ ({}/{})"
+            description_format = "~~{}~~ {}"
 
-        embed = discord.Embed(title=embed_title, description=description, color=color)
-        embed.add_field(name="Lobby Name", value=self.name, inline=False)
+        title = title_format.format(self.name, slots_taken, slots_total)
+        description = description_format.format(self.map, mark)
+        host = self.host if len(self.host) > 0 else "---"
+        server = get_map_server_nice(self.server)
+
+        embed = discord.Embed(title=title, description=description)
         embed.add_field(name="Host", value=host, inline=True)
-        embed.add_field(name="Server", value=self.server, inline=True)
-        embed.add_field(name="Players", value=players_str, inline=True)
+        embed.add_field(name="Server", value=server, inline=True)
+        if open:
+            if len(self.subscribers) > 0:
+                subscribers_string = get_subscribers_string(self.subscribers)
+                embed.set_footer(
+                    text=subscribers_string,
+                    icon_url="https://cdn.discordapp.com/emojis/{}.png".format(OKIB_EMOJI_ID)
+                )
+        else:
+            embed.color = COLOR_CLOSED
 
         return {
             "message": message,
@@ -1065,6 +1112,7 @@ async def report_ib_lobbies(pub_channel, ent_channel):
 async def do_getgames(is_ent_channel):
     global _open_lobbies
 
+    channel = _ent_channel if is_ent_channel else _pub_channel
     async with _update_lobbies_lock:
         # Clear all posted messages for open lobbies and trigger a refresh
         for lobby in _open_lobbies:
@@ -1075,7 +1123,7 @@ async def do_getgames(is_ent_channel):
             if message_id is not None:
                 message = None
                 try:
-                    message = await ctx.channel.fetch_message(message_id)
+                    message = await channel.fetch_message(message_id)
                 except Exception as e:
                     logging.error("Error fetching message with ID {}, {}".format(message_id, e))
                     traceback.print_exc()
