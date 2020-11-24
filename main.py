@@ -853,13 +853,13 @@ def get_map_server_nice(server):
     elif server == "kr":
         return ":flag_kr: KR"
     elif server == "Montreal":
-        return ":flag_ca: Montreal"
+        return ":flag_ca: Montreal (ENT)"
     elif server == "New York":
-        return ":flag_us: New York"
+        return ":flag_us: New York (ENT)"
     elif server == "France":
-        return ":flag_fr: France"
+        return ":flag_fr: France (ENT)"
     elif server == "Amsterdam":
-        return ":flag_nl: Amsterdam"
+        return ":flag_nl: Amsterdam (ENT)"
     return server
 
 def get_subscribers_string(subscribers):
