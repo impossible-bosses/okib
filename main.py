@@ -127,7 +127,7 @@ class TimedCallback:
         self._timeout = t
         self.callback = functools.partial(func, *args, **kwargs)
         self._task = asyncio.ensure_future(self._job())
-        
+
     async def _job(self):
         await asyncio.sleep(self._timeout)
         await self.callback()
