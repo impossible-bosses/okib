@@ -3,14 +3,14 @@
 Example `params.py` file:
 
 ```py
-TESTING = True
-
 BOT_ID = 1234
 BOT_TOKEN = "<your_discord_bot_token>"
 
 GUILD_NAME = "IB CAFETERIA"
 ENT_CHANNEL_NAME = "general-chat"
 PUB_CHANNEL_NAME = "pub-games"
+PEON_ID = 431854796748619777
+SHAMAN_ID = 431854421635366912
 
 # IDs for bot com guild and channel (these are example numbers, just random)
 COM_GUILD_ID = 777727718498949234
