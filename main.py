@@ -152,11 +152,11 @@ async def com(to_id, message_type, message = "", file = None):
         await _com_channel.send(payload, file=file)
 
 def archive_db():
-    try:
+    if not os.path.exists(DB_ARCHIVE_PATH):
         os.mkdir(os.path.dirname(DB_ARCHIVE_PATH))
-    except FileExistsError:
-        pass
-    os.replace(DB_FILE_PATH, DB_ARCHIVE_PATH)
+
+    if os.path.exists(DB_FILE_PATH):
+        os.replace(DB_FILE_PATH, DB_ARCHIVE_PATH)
 
 async def update_db(db_bytes):
     archive_db()
