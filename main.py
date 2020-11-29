@@ -152,8 +152,9 @@ async def com(to_id, message_type, message = "", file = None):
         await _com_channel.send(payload, file=file)
 
 def archive_db():
-    if not os.path.exists(DB_ARCHIVE_PATH):
-        os.mkdir(os.path.dirname(DB_ARCHIVE_PATH))
+    archive_dir = os.path.dirname(DB_ARCHIVE_PATH)
+    if not os.path.exists(archive_dir):
+        os.mkdir(archive_dir)
 
     if os.path.exists(DB_FILE_PATH):
         os.replace(DB_FILE_PATH, DB_ARCHIVE_PATH)
