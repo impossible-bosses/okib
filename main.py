@@ -104,7 +104,7 @@ client_intents = discord.Intents().default()
 client_intents.members = True
 _client = discord.ext.commands.Bot(command_prefix="+", intents=client_intents)
 _guild = None
-_pub_channel = None
+_bnet_channel = None
 _ent_channel = None
 
 # communication
@@ -119,8 +119,9 @@ _message_hub = MessageHub()
 _is_master_timeout = True
 
 # globals / workspace
-_open_lobbies = set()
-_api_down_tries = 0
+_open_lobbies = []
+_ent_down_tries = 0
+_wc3stats_down_tries = 0
 
 class TimedCallback:
     def __init__(self, t, func, *args, **kwargs):
@@ -411,7 +412,7 @@ async def update(ctx, bot_id):  # TODO default bot_id=None ??
 @_client.event
 async def on_ready():
     global _guild
-    global _pub_channel
+    global _bnet_channel
     global _ent_channel
     global _com_channel
     global _initialized
@@ -433,15 +434,15 @@ async def on_ready():
     if guild_com is None:
         raise Exception("Com virtual guild not found")
 
-    channel_pub = None
+    channel_bnet = None
     channel_ent = None
     for channel in guild_ib.text_channels:
-        if channel.name == params.PUB_CHANNEL_NAME:
-            channel_pub = channel
+        if channel.name == params.BNET_CHANNEL_NAME:
+            channel_bnet = channel
         if channel.name == params.ENT_CHANNEL_NAME:
             channel_ent = channel
-    if channel_pub is None:
-        raise Exception("Pub channel not found: \"{}\" in guild \"{}\"".format(params.PUB_CHANNEL_NAME, guild_ib.name))
+    if channel_bnet is None:
+        raise Exception("Pub channel not found: \"{}\" in guild \"{}\"".format(params.BNET_CHANNEL_NAME, guild_ib.name))
     if channel_ent is None:
         raise Exception("ENT channel not found: \"{}\" in guild \"{}\"".format(params.ENT_CHANNEL_NAME, guild_ib.name))
 
@@ -453,11 +454,11 @@ async def on_ready():
         raise Exception("Com channel not found")
 
     _guild = guild_ib
-    _pub_channel = channel_pub
+    _bnet_channel = channel_bnet
     _ent_channel = channel_ent
     _okib_emote = _client.get_emoji(OKIB_EMOJI_ID)
     _noib_emote = _client.get_emoji(NOIB_EMOJI_ID)
-    logging.info("Bot \"{}\" connected to Discord on guild \"{}\", pub channel \"{}\"".format(_client.user, guild_ib.name, channel_pub.name))
+    logging.info("Bot \"{}\" connected to Discord on guild \"{}\", pub channel \"{}\"".format(_client.user, guild_ib.name, channel_bnet.name))
     await _client.change_presence(activity=None)
     _com_channel = channel_com
 
@@ -489,15 +490,7 @@ async def on_message(message):
     else:
         # TODO temporary
         if message.content == "!getgames":
-            is_ent_channel = None
-            if message.channel == _ent_channel:
-                is_ent_channel = True
-            elif message.channel == _pub_channel:
-                is_ent_channel = False
-            if is_ent_channel is not None:
-                await ensure_display(message.delete)
-                await do_getgames(is_ent_channel)
-                return
+            await do_getgames(message.channel, message)
 
         await _client.process_commands(message)
 
@@ -787,6 +780,7 @@ async def pedigree(ctx):
 
 LOBBY_REFRESH_RATE = 5
 QUERY_RETRIES_BEFORE_WARNING = 10
+ENSURE_DISPLAY_WINDOW = LOBBY_REFRESH_RATE * 2
 
 _update_lobbies_lock = asyncio.Lock()
 
@@ -903,7 +897,7 @@ class Lobby:
         )
 
     def is_ib(self):
-        #return self.map.find("Legion") != -1 and self.map.find("TD") != -1 # test
+        return self.map.find("Legion") != -1 and self.map.find("TD") != -1 # test
         #return self.map.find("Uther Party") != -1 # test
         return self.map.find("Impossible") != -1 and self.map.find("Bosses") != -1
 
@@ -953,7 +947,8 @@ class Lobby:
                 slots_total -= 1
 
             if slots_total not in version.slots:
-                raise Exception("Invalid total slots {}, expected {}, for map file {}".format(self.slots_total, versions.slots, self.map))
+                logging.error("Invalid total slots {}, expected {}, for map file {}".format(self.slots_total, versions.slots, self.map))
+                return None
 
         title_format = "{} ({}/{})"
         description_format = "{} {}"
@@ -984,171 +979,216 @@ class Lobby:
             "embed": embed,
         }
 
-async def get_ib_lobbies():
-    timeout = aiohttp.ClientTimeout(total=LOBBY_REFRESH_RATE/2)
-    session = aiohttp.ClientSession(timeout=timeout)
+    async def create_message(self):
+        channel = _ent_channel if self.is_ent else _bnet_channel
 
-    # Query APIs
-    responses = await asyncio.gather(
-        session.get("https://api.wc3stats.com/gamelist"),
-        session.get("https://host.entgaming.net/allgames")
-    )
-    await session.close()
+        try:
+            message_info = self.to_discord_message_info()
+            if message_info is None:
+                logging.info("Lobby skipped: {}".format(self))
+                return
 
-    # Parse wc3stats lobbies
-    wc3stats_response_json = await responses[0].json()
+            logging.info("Creating lobby: {}".format(self))
+            key = self.get_message_id_key()
+            await ensure_display(send_message, channel, content=message_info["message"], embed=message_info["embed"], window=ENSURE_DISPLAY_WINDOW, return_name=key)
+        except Exception as e:
+            logging.error("Failed to send message for lobby \"{}\", {}".format(self, e))
+            traceback.print_exc()
 
-    if "body" not in wc3stats_response_json:
-        raise Exception("wc3stats HTTP response has no 'body'")
-    wc3stats_body = wc3stats_response_json["body"]
-    if not isinstance(wc3stats_body, list):
-        raise Exception("wc3stats HTTP response 'body' type is {}, not list".format(type(wc3stats_body)))
+    async def update_message(self, is_open=True):
+        channel = _ent_channel if self.is_ent else _bnet_channel
 
-    wc3stats_lobbies = [Lobby(obj, is_ent=False) for obj in wc3stats_body]
-    wc3stats_ib_lobbies = set([lobby for lobby in wc3stats_lobbies if lobby.is_ib()])
+        message_id = self.get_message_id()
+        if message_id is not None:
+            message = None
+            try:
+                message = await channel.fetch_message(message_id)
+            except Exception as e:
+                logging.error("Error fetching message with ID {}, {}".format(message_id, e))
+                traceback.print_exc()
 
-    # Parse ENT lobbies
-    ent_response_json = await responses[1].json()
-    if not isinstance(ent_response_json, list):
-        raise Exception("ENT HTTP response type is {}, not list".format(type(ent_response_json)))
+            if message is not None:
+                try:
+                    message_info = self.to_discord_message_info(is_open)
+                    if message_info is None:
+                        logging.info("Lobby skipped: {}".format(self))
+                        return
+                except Exception as e:
+                    logging.error("Failed to get lobby as message info for \"{}\", {}".format(
+                        self.name, e
+                    ))
+                    traceback.print_exc()
+                    return
 
-    ent_lobbies = [Lobby(obj, is_ent=True) for obj in ent_response_json]
-    ent_ib_lobbies = set([lobby for lobby in ent_lobbies if lobby.is_ib()])
+                logging.info("Updating lobby (open={}): {}".format(is_open, self))
+                await ensure_display(message.edit, content=message_info["message"], embed=message_info["embed"], window=ENSURE_DISPLAY_WINDOW)
+        else:
+            logging.error("Missing message ID on update for lobby {}".format(self))
 
+        if not is_open:
+            key = self.get_message_id_key()
+            if key in globals():
+                del globals()[key]
 
-    logging.info("IB lobbies: {}/{} from wc3stats, {}/{} from ENT".format(
-        len(wc3stats_ib_lobbies), len(wc3stats_lobbies), len(ent_ib_lobbies), len(ent_lobbies)
-    ))
-    return wc3stats_ib_lobbies | ent_ib_lobbies
+    async def delete_message(self):
+        channel = _ent_channel if self.is_ent else _bnet_channel
 
-async def report_ib_lobbies(pub_channel, ent_channel):
+        message_id = self.get_message_id()
+        if message_id is not None:
+            message = None
+            try:
+                message = await channel.fetch_message(message_id)
+            except Exception as e:
+                logging.error("Error fetching message with ID {}, {}".format(message_id, e))
+                traceback.print_exc()
+
+            if message is not None:
+                await ensure_display(message.delete, window=ENSURE_DISPLAY_WINDOW)
+        else:
+            logging.error("Missing message ID on delete for lobby {}".format(self))
+
+        key = self.get_message_id_key()
+        if key in globals():
+            del globals()[key]
+
+def get_lobby_changes(prev_lobbies, api_lobbies):
+    is_prev_lobby_closed = [(lobby not in api_lobbies) for lobby in prev_lobbies]
+    is_lobby_new = []
+    is_lobby_updated = []
+    for lobby in api_lobbies:
+        is_new = lobby not in prev_lobbies
+        is_updated = not is_new
+        if not is_new:
+            for lobby2 in prev_lobbies:
+                if lobby2 == lobby:
+                    is_updated = lobby2.is_updated(lobby)
+                    break
+
+        is_lobby_new.append(is_new)
+        is_lobby_updated.append(is_updated)
+
+    return (is_prev_lobby_closed, is_lobby_new, is_lobby_updated)
+
+async def report_lobbies(prev_lobbies, api_lobbies):
+    changes = get_lobby_changes(prev_lobbies, api_lobbies)
+
+    # Update messages for closed lobbies
+    for i in range(len(changes[0])):
+        if changes[0][i]:
+            await prev_lobbies[i].update_message(is_open=False)
+
+    # Create messages for new lobbies
+    for i in range(len(changes[1])):
+        if changes[1][i]:
+            await api_lobbies[i].create_message()
+
+    # Update messages for changed lobbies
+    for i in range(len(changes[2])):
+        if changes[2][i]:
+            await api_lobbies[i].update_message()
+
+async def update_bnet_lobbies(session, prev_lobbies):
+    response = await session.get("https://api.wc3stats.com/gamelist")
+    response_json = await response.json()
+    if "body" not in response_json:
+        raise Exception("wc3stats API response has no 'body'")
+    body = response_json["body"]
+    if not isinstance(body, list):
+        raise Exception("wc3stats API response 'body' type is {}, not list".format(type(body)))
+
+    lobbies = [Lobby(obj, is_ent=False) for obj in body]
+    ib_lobbies = [lobby for lobby in lobbies if lobby.is_ib()]
+    logging.info("wc3stats: {}/{} IB lobbies".format(len(ib_lobbies), len(lobbies)))
+
+    await report_lobbies(prev_lobbies, ib_lobbies)
+    return ib_lobbies
+
+async def update_ent_lobbies(session, prev_lobbies):
+    response = await session.get("https://host.entgaming.net/allgames")
+    response_json = await response.json()
+    if not isinstance(response_json, list):
+        raise Exception("ENT API response type is {}, not list".format(type(response_json)))
+
+    lobbies = [Lobby(obj, is_ent=True) for obj in response_json]
+    ib_lobbies = [lobby for lobby in lobbies if lobby.is_ib()]
+    logging.info("ENT: {}/{} IB lobbies".format(len(ib_lobbies), len(lobbies)))
+
+    await report_lobbies(prev_lobbies, ib_lobbies)
+    return ib_lobbies
+
+async def update_ib_lobbies():
     global _open_lobbies
-    global _api_down_tries
+    global _ent_down_tries
+    global _wc3stats_down_tries
 
-    window = LOBBY_REFRESH_RATE * 2
-    try:
-        lobbies = await get_ib_lobbies()
-    except Exception as e:
-        logging.error("Error getting IB lobbies, {} tries, {}".format(_api_down_tries, e))
-        traceback.print_exc()
+    prev_bnet_lobbies = [lobby for lobby in _open_lobbies if not lobby.is_ent]
+    prev_ent_lobbies = [lobby for lobby in _open_lobbies if lobby.is_ent]
 
-        _api_down_tries += 1
-        if _api_down_tries > QUERY_RETRIES_BEFORE_WARNING:
+    # Query API
+    timeout = aiohttp.ClientTimeout(total=LOBBY_REFRESH_RATE/2)
+    async with aiohttp.ClientSession(timeout=timeout) as session:
+        result = await asyncio.gather(
+            update_bnet_lobbies(session, prev_bnet_lobbies),
+            update_ent_lobbies(session, prev_ent_lobbies),
+            return_exceptions=True
+        )
+
+    new_bnet_lobbies = prev_bnet_lobbies
+    if isinstance(result[0], list):
+        new_bnet_lobbies = result[0]
+        if _wc3stats_down_tries > 0:
+            _wc3stats_down_tries = 0
+            await _client.change_presence(activity=None)
+    else:
+        logging.error("Failed to update bnet lobbies")
+        _wc3stats_down_tries += 1
+        if _wc3stats_down_tries > QUERY_RETRIES_BEFORE_WARNING:
             await _client.change_presence(activity=discord.Activity(
                 type=discord.ActivityType.listening,
-                name="bad lobby APIs (no data)")
-            )
-        return
+                name="bad wc3stats lobby API"
+            ))
 
-    if _api_down_tries > 0:
-        _api_down_tries = 0
-        await _client.change_presence(activity=None)
+    new_ent_lobbies = prev_ent_lobbies
+    if isinstance(result[1], list):
+        new_ent_lobbies = result[1]
+        if _ent_down_tries > 0:
+            _ent_down_tries = 0
+            await _client.change_presence(activity=None)
+    else:
+        logging.error("Failed to update ENT lobbies")
+        _ent_down_tries += 1
+        if _ent_down_tries > QUERY_RETRIES_BEFORE_WARNING:
+            await _client.change_presence(activity=discord.Activity(
+                type=discord.ActivityType.listening,
+                name="bad ENT lobby API"
+            ))
 
-    new_open_lobbies = set()
-    for lobby in _open_lobbies:
-        lobby_latest = lobby
-        still_open = lobby in lobbies
-        should_update = not still_open
-        if still_open:
-            for lobby2 in lobbies:
-                if lobby2 == lobby:
-                    should_update = lobby.is_updated(lobby2)
-                    lobby_latest = lobby2
-                    break
-            new_open_lobbies.add(lobby_latest)
-
-        if should_update:
-            message_id = lobby.get_message_id()
-            if message_id is not None:
-                message = None
-                try:
-                    channel = ent_channel if lobby_latest.is_ent else pub_channel
-                    message = await channel.fetch_message(message_id)
-                except Exception as e:
-                    logging.error("Error fetching message with ID {}, {}".format(message_id, e))
-                    traceback.print_exc()
-
-                if message is not None:
-                    try:
-                        message_info = lobby_latest.to_discord_message_info(still_open)
-                        if message_info is None:
-                            logging.info("Lobby skipped: {}".format(lobby_latest))
-                            continue
-                    except Exception as e:
-                        logging.error("Failed to get lobby as message info for \"{}\", {}".format(lobby_latest.name, e))
-                        traceback.print_exc()
-                        continue
-
-                    logging.info("Updating lobby (open={}): {}".format(still_open, lobby_latest))
-                    await ensure_display(message.edit, content=message_info["message"], embed=message_info["embed"], window=window)
-            else:
-                logging.error("Missing message ID for lobby {}".format(lobby))
-
-        if not still_open:
-            key = lobby.get_message_id_key()
-            if key in globals():
-                del globals()[key]
-
-    _open_lobbies = new_open_lobbies
-
-    for lobby in lobbies:
-        if lobby not in _open_lobbies:
-            try:
-                message_info = lobby.to_discord_message_info()
-                if message_info is None:
-                    logging.info("Lobby skipped: {}".format(lobby))
-                    continue
-                logging.info("Creating lobby: {}".format(lobby))
-                key = lobby.get_message_id_key()
-                channel = ent_channel if lobby.is_ent else pub_channel
-                await ensure_display(send_message, channel, content=message_info["message"], embed=message_info["embed"], window=window, return_name=key)
-            except Exception as e:
-                logging.error("Failed to send message for lobby \"{}\", {}".format(lobby.name, e))
-                traceback.print_exc()
-                continue
-
-            _open_lobbies.add(lobby)
+    _open_lobbies = new_bnet_lobbies + new_ent_lobbies
 
 # TODO temporary, to support "!getgames"
-async def do_getgames(is_ent_channel):
+async def do_getgames(channel, getgames_message):
     global _open_lobbies
 
-    channel = _ent_channel if is_ent_channel else _pub_channel
-    async with _update_lobbies_lock:
-        # Clear all posted messages for open lobbies and trigger a refresh
-        for lobby in _open_lobbies:
-            if lobby.is_ent != is_ent_channel:
-                continue
-
-            message_id = lobby.get_message_id()
-            if message_id is not None:
-                message = None
-                try:
-                    message = await channel.fetch_message(message_id)
-                except Exception as e:
-                    logging.error("Error fetching message with ID {}, {}".format(message_id, e))
-                    traceback.print_exc()
-
-                if message is not None:
-                    await ensure_display(message.delete)
-            key = lobby.get_message_id_key()
-            if key in globals():
-                del globals()[key]
-
-        _open_lobbies = [lobby for lobby in _open_lobbies if lobby.is_ent != is_ent_channel]
-        await report_ib_lobbies(_pub_channel, _ent_channel)
-
-@_client.command()
-async def getgames(ctx):
-    if ctx.channel == _ent_channel:
+    if channel == _ent_channel:
         is_ent_channel = True
-    elif ctx.channel == _pub_channel:
+    elif channel == _bnet_channel:
         is_ent_channel = False
     else:
         return
-    await ensure_display(ctx.message.delete)
+    await ensure_display(getgames_message.delete)
 
-    await do_getgames(is_ent_channel)
+    async with _update_lobbies_lock:
+        # Clear all posted messages for open lobbies and trigger a refresh
+        for lobby in _open_lobbies:
+            if lobby.is_ent == is_ent_channel:
+                await lobby.delete_message()
+
+        _open_lobbies = [lobby for lobby in _open_lobbies if lobby.is_ent != is_ent_channel]
+        await update_ib_lobbies()
+
+@_client.command()
+async def getgames(ctx):
+    await do_getgames(ctx.channel, ctx.message)
 
 @loop(seconds=LOBBY_REFRESH_RATE)
 async def refresh_ib_lobbies():
@@ -1157,11 +1197,7 @@ async def refresh_ib_lobbies():
 
     logging.info("Refreshing lobby list")
     async with _update_lobbies_lock:
-        try:
-            await report_ib_lobbies(_pub_channel, _ent_channel)
-        except Exception as e:
-            logging.error("Exception in report_ib_lobbies, {}".format(e))
-            traceback.print_exc()
+        await update_ib_lobbies()
 
 # ==== MAIN ========================================================================================
 
