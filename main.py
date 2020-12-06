@@ -514,7 +514,7 @@ OKIB_GATHER_PLAYERS = 8 # not pointless - sometimes I use this for testing
 
 _okib_channel =  None
 _okib_message_id = None
-_list_content = ""
+_list_content_embed = discord.Embed()
 _okib_emote = None
 _noib_emote = None
 _okib_members = []
@@ -535,22 +535,22 @@ async def combinator3000(*args):
         await f()
         
 async def list_update():
-    global _list_content
+    global _list_content_embed
     
     okib_list_string = ", ".join([member.display_name for member in _okib_members])
     noib_list_string = ", ".join([member.display_name for member in _noib_members])
-    _list_content = "{} asks:\n{} {}/{} : {}\n{} : {}".format(
-        _gatherer.display_name,
-        OKIB_EMOJI_STRING, len(_okib_members), OKIB_GATHER_PLAYERS, okib_list_string,
-        NOIB_EMOJI_STRING, noib_list_string
+    _list_content_embed = discord.Embed(
+        description="{} asks:\n{} {}/{} : {}\n{} : {}".format(
+            _gatherer.display_name,
+            OKIB_EMOJI_STRING, len(_okib_members), OKIB_GATHER_PLAYERS, okib_list_string,
+            NOIB_EMOJI_STRING, noib_list_string
+        )
     )
-    #await ensure_display((_okib_channel.fetch_message(_okib_message_id)).edit, content=_list_content)
 
 
 def gather_check():
     if len(_okib_members) >= OKIB_GATHER_PLAYERS and not _gathered:
         return True
-        #ensure_display(functools.partial(combinator3000,(_okib_channel.fetch_message(_okib_message_id)).edit,gather,content=_list_content))) 
     if len(_okib_members) < OKIB_GATHER_PLAYERS and _gathered:
         return False
         
@@ -560,10 +560,13 @@ async def up(ctx):
     
     if _okib_message_id is not None :
         await (await _okib_channel.fetch_message(_okib_message_id)).delete()
-    _okib_message_id = (await ctx.send(_list_content + '\n' +OKIB_GATHER_EMOJI_STRING)).id
-    _okib_message = await _okib_channel.fetch_message(_okib_message_id)
-    await _okib_message.add_reaction(_okib_emote)
-    await _okib_message.add_reaction(_noib_emote)
+    _okib_message_id = (await ctx.send(
+        content=OKIB_GATHER_EMOJI_STRING,
+        embed=_list_content_embed
+    )).id
+    okib_message = await _okib_channel.fetch_message(_okib_message_id)
+    await okib_message.add_reaction(_okib_emote)
+    await okib_message.add_reaction(_noib_emote)
     await ctx.message.delete()
     return _okib_message_id
 
@@ -623,11 +626,27 @@ async def okib(ctx, arg=None):
     elif modify:
         await list_update()
         if gather_check():
-            #nsure_display(functools.partial(combinator3000,gather,functools.partial((await _okib_channel.fetch_message(_okib_message_id)).edit,content=_list_content),functools.partial(reaction.remove,user)))
-            await ensure_display(functools.partial(combinator3000,ctx.message.delete,functools.partial((await _okib_channel.fetch_message(_okib_message_id)).edit,content=_list_content),gather))
+            await ensure_display(functools.partial(
+                combinator3000,
+                ctx.message.delete,
+                functools.partial(
+                    (await _okib_channel.fetch_message(_okib_message_id)).edit,
+                    content=OKIB_GATHER_EMOJI_STRING,
+                    embed=_list_content_embed
+                ),
+                gather
+            ))
             _gathered = True
         else:
-            await ensure_display(functools.partial(combinator3000,ctx.message.delete,functools.partial((await _okib_channel.fetch_message(_okib_message_id)).edit, content=_list_content)))
+            await ensure_display(functools.partial(
+                combinator3000,
+                ctx.message.delete,
+                functools.partial(
+                    (await _okib_channel.fetch_message(_okib_message_id)).edit,
+                    content=OKIB_GATHER_EMOJI_STRING,
+                    embed=_list_content_embed
+                )
+            ))
 
 @_client.command()
 async def noib(ctx):
@@ -646,10 +665,12 @@ async def noib(ctx):
         pass
 
     if not ctx.message.mentions:
-        
-        
         if _okib_message_id is not None:
-            await ensure_display(functools.partial(combinator3000,ctx.message.delete,(await _okib_channel.fetch_message(_okib_message_id)).delete))
+            await ensure_display(functools.partial(
+                combinator3000,
+                ctx.message.delete,
+                (await _okib_channel.fetch_message(_okib_message_id)).delete
+            ))
         _okib_message_id = None
         _okib_channel = None
         
@@ -663,7 +684,15 @@ async def noib(ctx):
             modify = True
     if modify:
         await list_update()
-        await ensure_display(functools.partial(combinator3000,ctx.message.delete,functools.partial((await _okib_channel.fetch_message(_okib_message_id)).edit, content=_list_content)))
+        await ensure_display(functools.partial(
+            combinator3000,
+            ctx.message.delete,
+            functools.partial(
+                (await _okib_channel.fetch_message(_okib_message_id)).edit,
+                content=OKIB_GATHER_EMOJI_STRING,
+                embed=_list_content_embed
+            )
+        ))
         
 async def okib_on_reaction_add(reaction, user):
     global _okib_members
@@ -695,9 +724,26 @@ async def okib_on_reaction_add(reaction, user):
                 await list_update()
                 #remove&edit
                 if gather_check():
-                    await ensure_display(functools.partial(combinator3000,gather,functools.partial((await _okib_channel.fetch_message(_okib_message_id)).edit,content=_list_content),functools.partial(reaction.remove,user)))                    
+                    await ensure_display(functools.partial(
+                        combinator3000,
+                        gather,
+                        functools.partial(
+                            (await _okib_channel.fetch_message(_okib_message_id)).edit,
+                            content=OKIB_GATHER_EMOJI_STRING,
+                            embed=_list_content_embed
+                        ),
+                        functools.partial(reaction.remove,user)
+                    ))
                 else:
-                    await ensure_display(functools.partial(combinator3000,functools.partial((await _okib_channel.fetch_message(_okib_message_id)).edit,content=_list_content),functools.partial(reaction.remove,user)))
+                    await ensure_display(functools.partial(
+                        combinator3000,
+                        functools.partial(
+                            (await _okib_channel.fetch_message(_okib_message_id)).edit,
+                            content=OKIB_GATHER_EMOJI_STRING,
+                            embed=_list_content_embed
+                        ),
+                        functools.partial(reaction.remove,user)
+                    ))
                 return
         #justremove   
         await ensure_display(functools.partial(reaction.remove,user))
