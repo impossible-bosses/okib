@@ -514,9 +514,7 @@ OKIB_GATHER_PLAYERS = 8 # not pointless - sometimes I use this for testing
 
 _okib_channel =  None
 _okib_message_id = None
-_okib_message = None
-_okib_list_message_id = None
-_okib_list_message = None
+_list_content = ""
 _okib_emote = None
 _noib_emote = None
 _okib_members = []
@@ -528,51 +526,51 @@ _gather_time = datetime.datetime.now()
 async def gather():
     gather_list_string = " ".join([member.mention for member in _okib_members])
     # TODO combine these? can't combine the message sends, but can combine the ensure_display
-    await ensure_display(_okib_channel.send, gather_list_string + " Time to play!")
-    await ensure_display(_okib_channel.send, OKIB_EMOJI_STRING)
+    # you doing it wront => the purpose of making a encapsulating function is to actually ensuredisplay the whole thing not everything inside it ^^
+    await _okib_channel.send(gather_list_string + " Time to play!")
+    await _okib_channel.send(OKIB_EMOJI_STRING)
 
+async def combinator3000(*args):
+    for f in args:
+        await f()
+        
 async def list_update():
-    global _gathered
-
+    global _list_content
+    
     okib_list_string = ", ".join([member.display_name for member in _okib_members])
     noib_list_string = ", ".join([member.display_name for member in _noib_members])
-    list_content = "{} asks:\n{} {}/{} : {}\n{} : {}".format(
+    _list_content = "{} asks:\n{} {}/{} : {}\n{} : {}".format(
         _gatherer.display_name,
         OKIB_EMOJI_STRING, len(_okib_members), OKIB_GATHER_PLAYERS, okib_list_string,
         NOIB_EMOJI_STRING, noib_list_string
     )
-    await ensure_display(_okib_list_message.edit, content=list_content)
+    #await ensure_display((_okib_channel.fetch_message(_okib_message_id)).edit, content=_list_content)
 
+
+def gather_check():
     if len(_okib_members) >= OKIB_GATHER_PLAYERS and not _gathered:
-        _gathered = True
-        await gather()
+        return True
+        #ensure_display(functools.partial(combinator3000,(_okib_channel.fetch_message(_okib_message_id)).edit,gather,content=_list_content))) 
     if len(_okib_members) < OKIB_GATHER_PLAYERS and _gathered:
-        _gathered = False
+        return False
+        
 
 async def up(ctx):
-    global _okib_list_message
-    global _okib_message
-    global _okib_list_message_id
     global _okib_message_id
-    global _noib_emote
-
-    await _okib_message.delete()
-    await _okib_list_message.delete()
-
-    _okib_list_message_id = (await ctx.send(OKIB_EMOJI_STRING +' : \n' + NOIB_EMOJI_STRING +' : ' )).id
-    _okib_message_id = (await ctx.send(OKIB_GATHER_EMOJI_STRING)).id
-    _okib_list_message = await _okib_channel.fetch_message(_okib_list_message_id)
+    
+    if _okib_message_id is not None :
+        await (await _okib_channel.fetch_message(_okib_message_id)).delete()
+    _okib_message_id = (await ctx.send(_list_content + '\n' +OKIB_GATHER_EMOJI_STRING)).id
     _okib_message = await _okib_channel.fetch_message(_okib_message_id)
     await _okib_message.add_reaction(_okib_emote)
     await _okib_message.add_reaction(_noib_emote)
-    await list_update()
+    return _okib_message_id
 
+    
+    
 @_client.command()
 async def okib(ctx, arg=None):
     global _okib_channel
-    global _okib_list_message
-    global _okib_message
-    global _okib_list_message_id
     global _okib_message_id
     global _okib_members
     global _noib_members
@@ -589,7 +587,7 @@ async def okib(ctx, arg=None):
     if adv == False and arg != None:
         await ensure_display(ctx.channel.send, NO_POWER_MSG)
         return
-    await ensure_display(ctx.message.delete)
+    await ctx.message.delete()
 
     if _okib_channel is None:
         _gatherer = ctx.message.author
@@ -603,15 +601,11 @@ async def okib(ctx, arg=None):
             _noib_members = []
 
         _okib_channel = ctx.channel
-        _okib_list_message_id = (await ctx.send(OKIB_EMOJI_STRING +' : \n' + NOIB_EMOJI_STRING +' : ' )).id
-        _okib_message_id = (await ctx.send(OKIB_GATHER_EMOJI_STRING)).id
-        _okib_list_message = await _okib_channel.fetch_message(_okib_list_message_id)
-        _okib_message = await _okib_channel.fetch_message(_okib_message_id)
-        await _okib_message.add_reaction(_okib_emote)
-        await _okib_message.add_reaction(_noib_emote)
         await list_update()
+        await ensure_display(up,ctx,return_name = "_okib_message_id")
+
     elif arg == None:
-        await up(ctx)
+        await ensure_display(up,ctx,return_name = "_okib_message_id")
     modify = False
     for user in ctx.message.mentions:
         if user not in _okib_members:
@@ -620,16 +614,26 @@ async def okib(ctx, arg=None):
         if user in _noib_members:
             _noib_members.remove(user)
             modify = True
-    if modify or arg == 'retrieve':
+            
+    if arg == 'retrieve':
         await list_update()
+        gather_check()
+        if _gathered:
+            await ensure_display(up,ctx,2,"_okib_message_id")
+    elif modify:
+        await list_update()
+        if gather_check():
+            await ensure_display(functools.partial(combinator3000,(await _okib_channel.fetch_message(_okib_message_id)).edit,gather,content=_list_content))
+            _gathered = True
+        else:
+            await ensure_display((await _okib_channel.fetch_message(_okib_message_id)).edit, content=_list_content)
 
 @_client.command()
 async def noib(ctx):
     global _okib_members
     global _noib_members
     global _okib_channel
-    global _okib_list_message
-    global _okib_message
+    global _okib_message_id
 
     if ctx.message.author.roles[-1] <= _guild.get_role(params.PEON_ID):
         await ensure_display(ctx.channel.send, NO_POWER_MSG)
@@ -643,12 +647,10 @@ async def noib(ctx):
     await ctx.message.delete()
 
     if not ctx.message.mentions:
+        
         _okib_channel = None
-        if _okib_list_message is not None:
-            await _okib_list_message.delete()
         if _okib_message is not None:
-            await _okib_message.delete()
-        _okib_list_message = None
+            await ensure_display((await _okib_channel.fetch_message(_okib_message_id)).delete())
         _okib_message = None
 
     modify = False
@@ -661,13 +663,13 @@ async def noib(ctx):
             modify = True
     if modify:
         await list_update()
-
+        await ensure_display((await _okib_channel.fetch_message(_okib_message_id)).edit, content=_list_content)
+        
 async def okib_on_reaction_add(reaction, user):
     global _okib_members
     global _noib_members
-
     if reaction.message.id == _okib_message_id and user.bot == False:
-        modify = False
+        modify = False 
         if user.roles[-1] >= _guild.get_role(params.PEON_ID):
             try:
                 if reaction.emoji == _okib_emote:
@@ -677,7 +679,6 @@ async def okib_on_reaction_add(reaction, user):
                     if user in _noib_members:
                         _noib_members.remove(user)
                         modify = True
-                    await reaction.remove(user)
 
                 elif reaction.emoji == _noib_emote:
                     if user not in _noib_members:
@@ -686,17 +687,20 @@ async def okib_on_reaction_add(reaction, user):
                     if user in _okib_members:
                         _okib_members.remove(user)
                         modify = True
-                    await reaction.remove(user)
-                else:
-                    await reaction.remove(user)
-
 
             except AttributeError:
-                await reaction.remove(user)
+                pass
+                
             if modify:
                 await list_update()
-        else:
-            await reaction.remove(user)
+                #remove&edit
+                if gather_check():
+                    await ensure_display(functools.partial(combinator3000,gather,functools.partial((await _okib_channel.fetch_message(_okib_message_id)).edit,content=_list_content),functools.partial(reaction.remove,user)))                    
+                else:
+                    await ensure_display(functools.partial(combinator3000,functools.partial((await _okib_channel.fetch_message(_okib_message_id)).edit,content=_list_content),functools.partial(reaction.remove,user)))
+                return
+        #justremove   
+        await ensure_display(functools.partial(reaction.remove,user))
 
 async def peon_promote(member):
     channel = await member.create_dm()
