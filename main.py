@@ -647,11 +647,12 @@ async def noib(ctx):
 
     if not ctx.message.mentions:
         
-        _okib_channel = None
+        
         if _okib_message_id is not None:
             await ensure_display(functools.partial(combinator3000,ctx.message.delete,(await _okib_channel.fetch_message(_okib_message_id)).delete))
         _okib_message_id = None
-
+        _okib_channel = None
+        
     modify = False
     for user in ctx.message.mentions:
         if user not in _noib_members:
