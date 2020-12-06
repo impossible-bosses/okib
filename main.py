@@ -564,6 +564,7 @@ async def up(ctx):
     _okib_message = await _okib_channel.fetch_message(_okib_message_id)
     await _okib_message.add_reaction(_okib_emote)
     await _okib_message.add_reaction(_noib_emote)
+    await ctx.message.delete()
     return _okib_message_id
 
     
@@ -587,7 +588,6 @@ async def okib(ctx, arg=None):
     if adv == False and arg != None:
         await ensure_display(ctx.channel.send, NO_POWER_MSG)
         return
-    await ctx.message.delete()
 
     if _okib_channel is None:
         _gatherer = ctx.message.author
@@ -624,10 +624,10 @@ async def okib(ctx, arg=None):
         await list_update()
         if gather_check():
             #nsure_display(functools.partial(combinator3000,gather,functools.partial((await _okib_channel.fetch_message(_okib_message_id)).edit,content=_list_content),functools.partial(reaction.remove,user)))
-            await ensure_display(functools.partial(combinator3000,functools.partial((await _okib_channel.fetch_message(_okib_message_id)).edit,content=_list_content),gather))
+            await ensure_display(functools.partial(combinator3000,ctx.message.delete,functools.partial((await _okib_channel.fetch_message(_okib_message_id)).edit,content=_list_content),gather))
             _gathered = True
         else:
-            await ensure_display((await _okib_channel.fetch_message(_okib_message_id)).edit, content=_list_content)
+            await ensure_display(functools.partial(combinator3000,ctx.message.delete,functools.partial((await _okib_channel.fetch_message(_okib_message_id)).edit, content=_list_content)))
 
 @_client.command()
 async def noib(ctx):
@@ -635,7 +635,7 @@ async def noib(ctx):
     global _noib_members
     global _okib_channel
     global _okib_message_id
-
+    
     if ctx.message.author.roles[-1] <= _guild.get_role(params.PEON_ID):
         await ensure_display(ctx.channel.send, NO_POWER_MSG)
         return
@@ -645,14 +645,12 @@ async def noib(ctx):
             return
         pass
 
-    await ctx.message.delete()
-
     if not ctx.message.mentions:
         
         _okib_channel = None
-        if _okib_message is not None:
-            await ensure_display((await _okib_channel.fetch_message(_okib_message_id)).delete())
-        _okib_message = None
+        if _okib_message_id is not None:
+            await ensure_display(functools.partial(combinator3000,ctx.message.delete,(await _okib_channel.fetch_message(_okib_message_id)).delete))
+        _okib_message_id = None
 
     modify = False
     for user in ctx.message.mentions:
@@ -664,7 +662,7 @@ async def noib(ctx):
             modify = True
     if modify:
         await list_update()
-        await ensure_display((await _okib_channel.fetch_message(_okib_message_id)).edit, content=_list_content)
+        await ensure_display(functools.partial(combinator3000,ctx.message.delete,functools.partial((await _okib_channel.fetch_message(_okib_message_id)).edit, content=_list_content)))
         
 async def okib_on_reaction_add(reaction, user):
     global _okib_members
