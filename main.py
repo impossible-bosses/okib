@@ -944,7 +944,7 @@ class Lobby:
                 slots_total -= 1
 
             if slots_total not in version.slots:
-                logging.error("Invalid total slots {}, expected {}, for map file {}".format(self.slots_total, versions.slots, self.map))
+                logging.error("Invalid total slots {}, expected {}, for map file {}".format(self.slots_total, version.slots, self.map))
                 return None
 
         title_format = "{} ({}/{})"
