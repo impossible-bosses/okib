@@ -102,7 +102,7 @@ print("Source version {}".format(VERSION))
 # discord connection
 client_intents = discord.Intents().default()
 client_intents.members = True
-_client = discord.ext.commands.Bot(command_prefix="+", intents=client_intents)
+_client = discord.ext.commands.Bot(command_prefix="-", intents=client_intents)
 _guild = None
 _bnet_channel = None
 _ent_channel = None
@@ -623,7 +623,8 @@ async def okib(ctx, arg=None):
     elif modify:
         await list_update()
         if gather_check():
-            await ensure_display(functools.partial(combinator3000,(await _okib_channel.fetch_message(_okib_message_id)).edit,gather,content=_list_content))
+            #nsure_display(functools.partial(combinator3000,gather,functools.partial((await _okib_channel.fetch_message(_okib_message_id)).edit,content=_list_content),functools.partial(reaction.remove,user)))
+            await ensure_display(functools.partial(combinator3000,functools.partial((await _okib_channel.fetch_message(_okib_message_id)).edit,content=_list_content),gather))
             _gathered = True
         else:
             await ensure_display((await _okib_channel.fetch_message(_okib_message_id)).edit, content=_list_content)
