@@ -1216,10 +1216,12 @@ async def lobbies_on_reaction_add(reaction, user):
     if user.bot or (reaction.emoji != _okib_emote and reaction.emoji != _noib_emote):
         return
 
+    match_lobby = False
     async with _update_lobbies_lock:
         for lobby in _open_lobbies:
             message_id = lobby.get_message_id()
             if reaction.message.id == message_id:
+                match_lobby = True
                 updated = False
                 if reaction.emoji == _okib_emote and user not in lobby.subscribers:
                     logging.info("User {} subbed to lobby {}".format(user.display_name, lobby))
@@ -1233,7 +1235,8 @@ async def lobbies_on_reaction_add(reaction, user):
                 if updated:
                     await lobby.update_message()
 
-    await ensure_display(reaction.remove, user)
+    if match_lobby:
+        await ensure_display(reaction.remove, user)
 
 # ==== MAIN ========================================================================================
 
