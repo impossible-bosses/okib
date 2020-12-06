@@ -326,6 +326,12 @@ async def send_message(channel, *args, **kwargs):
     message = await channel.send(*args, **kwargs)
     return message.id
 
+async def send_message_with_ib_reactions(channel, *args, **kwargs):
+    message = await channel.send(*args, **kwargs)
+    await message.add_reaction(_okib_emote)
+    await message.add_reaction(_noib_emote)
+    return message.id
+
 async def ensure_display_backup(func, *args, window=2, return_name=None, **kwargs):
     global _master_instance
     global _alive_instances
@@ -656,8 +662,7 @@ async def noib(ctx):
     if modify:
         await list_update()
 
-@_client.event
-async def on_reaction_add(reaction, user):
+async def okib_on_reaction_add(reaction, user):
     global _okib_members
     global _noib_members
 
@@ -857,14 +862,6 @@ def get_map_server_nice(server):
         return ":flag_nl: Amsterdam (ENT)"
     return server
 
-def get_subscribers_string(subscribers):
-    string = ""
-    for i in range(0, len(subscribers), 4):
-        if i != 0:
-            string += "\n"
-        string += ", ".join(subscribers[i:i+4])
-    return string
-
 class Lobby:
     def __init__(self, lobby_dict, is_ent):
         self.is_ent = is_ent
@@ -872,7 +869,7 @@ class Lobby:
         self.name = lobby_dict["name"]
         self.map = lobby_dict["map"]
         self.host = lobby_dict["host"]
-        self.subscribers = [] # TODO use this
+        self.subscribers = []
 
         if is_ent:
             self.server = lobby_dict["location"]
@@ -964,14 +961,21 @@ class Lobby:
         embed = discord.Embed(title=title, description=description)
         embed.add_field(name="Host", value=host, inline=True)
         embed.add_field(name="Server", value=server, inline=True)
-        if open:
-            if len(self.subscribers) > 0:
-                subscribers_string = get_subscribers_string(self.subscribers)
-                embed.set_footer(
-                    text=subscribers_string,
-                    icon_url="https://cdn.discordapp.com/emojis/{}.png".format(OKIB_EMOJI_ID)
-                )
-        else:
+        if len(self.subscribers) > 0:
+            subscribers_string = ""
+            for i in range(0, len(self.subscribers), 4):
+                if i != 0:
+                    subscribers_string += "\n"
+                subscribers_string += ", ".join([
+                    sub.display_name for sub in self.subscribers[i:i+4]
+                ])
+
+            embed.set_footer(
+                text=subscribers_string,
+                icon_url="https://cdn.discordapp.com/emojis/{}.png".format(OKIB_EMOJI_ID)
+            )
+
+        if not open:
             embed.color = COLOR_CLOSED
 
         return {
@@ -990,7 +994,10 @@ class Lobby:
 
             logging.info("Creating lobby: {}".format(self))
             key = self.get_message_id_key()
-            await ensure_display(send_message, channel, content=message_info["message"], embed=message_info["embed"], window=ENSURE_DISPLAY_WINDOW, return_name=key)
+            await ensure_display(send_message_with_ib_reactions,
+                channel, content=message_info["message"], embed=message_info["embed"],
+                window=ENSURE_DISPLAY_WINDOW, return_name=key
+            )
         except Exception as e:
             logging.error("Failed to send message for lobby \"{}\", {}".format(self, e))
             traceback.print_exc()
@@ -1026,6 +1033,12 @@ class Lobby:
             logging.error("Missing message ID on update for lobby {}".format(self))
 
         if not is_open:
+            if len(self.subscribers) > 0:
+                logging.info("Lobby closed, notifying {} subscribers".format(len(self.subscribers)))
+                subscribers_string = "Lobby started/unhosted: **{}**\n".format(self.name)
+                subscribers_string += ", ".join([sub.mention for sub in self.subscribers])
+                await ensure_display(channel.send, subscribers_string)
+
             key = self.get_message_id_key()
             if key in globals():
                 del globals()[key]
@@ -1052,6 +1065,7 @@ class Lobby:
             del globals()[key]
 
 def get_lobby_changes(prev_lobbies, api_lobbies):
+    lobbies = []
     is_prev_lobby_closed = [(lobby not in api_lobbies) for lobby in prev_lobbies]
     is_lobby_new = []
     is_lobby_updated = []
@@ -1061,31 +1075,34 @@ def get_lobby_changes(prev_lobbies, api_lobbies):
         if not is_new:
             for lobby2 in prev_lobbies:
                 if lobby2 == lobby:
+                    lobby.subscribers = lobby2.subscribers
                     is_updated = lobby2.is_updated(lobby)
                     break
 
+        lobbies.append(lobby)
         is_lobby_new.append(is_new)
         is_lobby_updated.append(is_updated)
 
-    return (is_prev_lobby_closed, is_lobby_new, is_lobby_updated)
+    return (lobbies, is_prev_lobby_closed, is_lobby_new, is_lobby_updated)
 
 async def report_lobbies(prev_lobbies, api_lobbies):
     changes = get_lobby_changes(prev_lobbies, api_lobbies)
+    lobbies = changes[0]
 
     # Update messages for closed lobbies
-    for i in range(len(changes[0])):
-        if changes[0][i]:
+    for i in range(len(prev_lobbies)):
+        if changes[1][i]:
             await prev_lobbies[i].update_message(is_open=False)
 
-    # Create messages for new lobbies
-    for i in range(len(changes[1])):
-        if changes[1][i]:
-            await api_lobbies[i].create_message()
-
-    # Update messages for changed lobbies
-    for i in range(len(changes[2])):
+    # Create/update messages for open lobbies
+    for i in range(len(lobbies)):
+        assert not (changes[2][i] and changes[3][i])
         if changes[2][i]:
-            await api_lobbies[i].update_message()
+            await lobbies[i].create_message()
+        if changes[3][i]:
+            await lobbies[i].update_message()
+
+    return lobbies
 
 async def update_bnet_lobbies(session, prev_lobbies):
     response = await session.get("https://api.wc3stats.com/gamelist")
@@ -1099,9 +1116,7 @@ async def update_bnet_lobbies(session, prev_lobbies):
     lobbies = [Lobby(obj, is_ent=False) for obj in body]
     ib_lobbies = [lobby for lobby in lobbies if lobby.is_ib()]
     logging.info("wc3stats: {}/{} IB lobbies".format(len(ib_lobbies), len(lobbies)))
-
-    await report_lobbies(prev_lobbies, ib_lobbies)
-    return ib_lobbies
+    return await report_lobbies(prev_lobbies, ib_lobbies)
 
 async def update_ent_lobbies(session, prev_lobbies):
     response = await session.get("https://host.entgaming.net/allgames")
@@ -1112,9 +1127,7 @@ async def update_ent_lobbies(session, prev_lobbies):
     lobbies = [Lobby(obj, is_ent=True) for obj in response_json]
     ib_lobbies = [lobby for lobby in lobbies if lobby.is_ib()]
     logging.info("ENT: {}/{} IB lobbies".format(len(ib_lobbies), len(lobbies)))
-
-    await report_lobbies(prev_lobbies, ib_lobbies)
-    return ib_lobbies
+    return await report_lobbies(prev_lobbies, ib_lobbies)
 
 async def update_ib_lobbies():
     global _open_lobbies
@@ -1199,7 +1212,38 @@ async def refresh_ib_lobbies():
     async with _update_lobbies_lock:
         await update_ib_lobbies()
 
+async def lobbies_on_reaction_add(reaction, user):
+    if user.bot or (reaction.emoji != _okib_emote and reaction.emoji != _noib_emote):
+        return
+
+    async with _update_lobbies_lock:
+        for lobby in _open_lobbies:
+            message_id = lobby.get_message_id()
+            if reaction.message.id == message_id:
+                updated = False
+                if reaction.emoji == _okib_emote and user not in lobby.subscribers:
+                    logging.info("User {} subbed to lobby {}".format(user.display_name, lobby))
+                    lobby.subscribers.append(user)
+                    updated = True
+                if reaction.emoji == _noib_emote and user in lobby.subscribers:
+                    logging.info("User {} unsubbed from lobby {}".format(user.display_name, lobby))
+                    lobby.subscribers.remove(user)
+                    updated = True
+
+                if updated:
+                    await lobby.update_message()
+
+    await ensure_display(reaction.remove, user)
+
 # ==== MAIN ========================================================================================
+
+@_client.event
+async def on_reaction_add(reaction, user):
+    await asyncio.gather(
+        okib_on_reaction_add(reaction, user),
+        lobbies_on_reaction_add(reaction, user),
+        return_exceptions=True
+    )
 
 if __name__ == "__main__":
     logs_dir = os.path.join(ROOT_DIR, "logs")
