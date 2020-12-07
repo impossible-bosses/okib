@@ -525,8 +525,6 @@ _gather_time = datetime.datetime.now()
 
 async def gather():
     gather_list_string = " ".join([member.mention for member in _okib_members])
-    # TODO combine these? can't combine the message sends, but can combine the ensure_display
-    # you doing it wront => the purpose of making a encapsulating function is to actually ensuredisplay the whole thing not everything inside it ^^
     await _okib_channel.send(gather_list_string + " Time to play!")
     await _okib_channel.send(OKIB_EMOJI_STRING)
 
