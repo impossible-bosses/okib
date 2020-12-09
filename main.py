@@ -668,6 +668,8 @@ async def noib(ctx):
 async def okib_on_reaction_add(reaction, user):
     global _okib_members
     global _noib_members
+    global _gathered = True
+    
     if reaction.message.id == _okib_message_id and user.bot == False:
         modify = False 
         if user.roles[-1] >= _guild.get_role(params.PEON_ID):
@@ -695,7 +697,8 @@ async def okib_on_reaction_add(reaction, user):
                 await list_update()
                 #remove&edit
                 if gather_check():
-                    await ensure_display(functools.partial(combinator3000,gather,functools.partial((await _okib_channel.fetch_message(_okib_message_id)).edit,content=_list_content),functools.partial(reaction.remove,user)))                    
+                    await ensure_display(functools.partial(combinator3000,gather,functools.partial((await _okib_channel.fetch_message(_okib_message_id)).edit,content=_list_content),functools.partial(reaction.remove,user)))
+                    _gathered = True
                 else:
                     await ensure_display(functools.partial(combinator3000,functools.partial((await _okib_channel.fetch_message(_okib_message_id)).edit,content=_list_content),functools.partial(reaction.remove,user)))
                 return
