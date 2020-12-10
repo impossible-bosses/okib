@@ -668,7 +668,7 @@ async def noib(ctx):
 async def okib_on_reaction_add(reaction, user):
     global _okib_members
     global _noib_members
-    global _gathered = True
+    global _gathered
     
     if reaction.message.id == _okib_message_id and user.bot == False:
         modify = False 
