@@ -88,7 +88,7 @@ class MessageHub:
             assert message_type == MessageType.ENSURE_DISPLAY
             for message in messages_in_window:
                 if message != "":
-                    kv = parse_ensure_display_value(message)
+                    kv = parse_ensure_display_value(message.message)
                     if kv[0] == return_name:
                         return True
             return False
@@ -901,7 +901,7 @@ class Lobby:
         )
 
     def is_ib(self):
-        #return self.map.find("Legion") != -1 and self.map.find("TD") != -1 # test
+        return self.map.find("Legion") != -1 and self.map.find("TD") != -1 # test
         #return self.map.find("Uther Party") != -1 # test
         return self.map.find("Impossible") != -1 and self.map.find("Bosses") != -1
 
