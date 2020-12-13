@@ -215,6 +215,8 @@ def update_source_and_reset():
 
 def parse_ensure_display_value(message):
     kv = message.split("=")
+    assert len(kv) == 2
+
     value = None
     if len(kv[1]) > 0:
         data_type = kv[1][0]
