@@ -14,7 +14,7 @@ import pickle
 import sqlite3
 import sys
 import traceback
-
+import requests
 import params
 
 ROOT_DIR = os.path.dirname(os.path.realpath(__file__))
@@ -102,7 +102,7 @@ print("Source version {}".format(VERSION))
 # discord connection
 client_intents = discord.Intents().default()
 client_intents.members = True
-_client = discord.ext.commands.Bot(command_prefix="!", intents=client_intents)
+_client = discord.ext.commands.Bot(command_prefix="+", intents=client_intents)
 _guild = None
 _bnet_channel = None
 _ent_channel = None
@@ -497,7 +497,7 @@ async def on_message(message):
         # TODO temporary
         if message.content == "!getgames":
             await do_getgames(message.channel, message)
-
+        await check_replay(message)
         await _client.process_commands(message)
 
 # ==== OKIB ========================================================================================
@@ -787,6 +787,26 @@ async def pedigree(ctx):
                 await ensure_display(ctx.channel.send, "{} => User <@!{}> has been warned by {} for the following reason:\n{}".format(row[2], row[0], row[3], row[1]))
                 row = cursor.fetchone()
     conn.close()
+
+# ==== MISC ========================================================================================
+
+async def check_replay(message):
+    att = message.attachments
+    if len(att) > 0 :
+        if ".w3g" in att[0].filename:
+            replay = await att[0].read()
+            code = await post_replay(replay)
+            await ensure_display(message.channel.send, "Replay `"+ att[0].filename +"` sent : " + str(code))
+
+async def post_replay(replay):
+    #replay = open("replay.w3g", "rb")
+    file_dic = {
+        "file": replay,
+    }
+    r = requests.post("https://api.wc3stats.com/upload", files=file_dic)
+    print(r.content)
+    return r.status_code
+
 
 # ==== LOBBIES =====================================================================================
 
