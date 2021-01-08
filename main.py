@@ -1029,7 +1029,7 @@ class Lobby:
 
             logging.info("Creating lobby: {}".format(self))
             key = self.get_message_id_key()
-            await ensure_display(send_message_with_ib_reactions,
+            await ensure_display(send_message_with_bell_reactions,
                 channel, content=message_info["message"], embed=message_info["embed"],
                 window=ENSURE_DISPLAY_WINDOW, return_name=key
             )
