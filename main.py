@@ -964,11 +964,6 @@ class Lobby:
             mark = ":x:"
             message = ":warning: *WARNING: Old map version* :warning:"
 
-        if self.is_ent and _gathered:
-            if message != "":
-                message += "\n"
-            message += " ".join([member.mention for member in _okib_members])
-
         slots_taken = self.slots_taken
         slots_total = self.slots_total
 
