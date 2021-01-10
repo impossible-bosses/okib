@@ -328,8 +328,8 @@ async def send_message(channel, *args, **kwargs):
 
 async def send_message_with_bell_reactions(channel, *args, **kwargs):
     message = await channel.send(*args, **kwargs)
-    await message.add_reaction(_bell_emote)
-    await message.add_reaction(_nobell_emote)
+    await message.add_reaction(BELL_EMOJI)
+    await message.add_reaction(NOBELL_EMOJI)
     return message.id
 
 async def ensure_display_backup(func, *args, window=2, return_name=None, **kwargs):
@@ -426,8 +426,6 @@ async def on_ready():
     global _callbacks
     global _okib_emote
     global _noib_emote
-    global _bell_emote
-    global _nobell_emote
 
     guild_ib = None
     guild_com = None
@@ -466,8 +464,6 @@ async def on_ready():
     _ent_channel = channel_ent
     _okib_emote = _client.get_emoji(OKIB_EMOJI_ID)
     _noib_emote = _client.get_emoji(NOIB_EMOJI_ID)
-    _bell_emote = _client.get_emoji(BELL_EMOJI_ID)
-    _nobell_emote = _client.get_emoji(NOBELL_EMOJI_ID)
     logging.info("Bot \"{}\" connected to Discord on guild \"{}\", pub channel \"{}\"".format(_client.user, guild_ib.name, channel_bnet.name))
     await _client.change_presence(activity=None)
     _com_channel = channel_com
@@ -817,12 +813,10 @@ async def post_replay(replay):
 LOBBY_REFRESH_RATE = 5
 QUERY_RETRIES_BEFORE_WARNING = 10
 ENSURE_DISPLAY_WINDOW = LOBBY_REFRESH_RATE * 2
-BELL_EMOJI_ID = 797184178629378068
-NOBELL_EMOJI_ID = 797184193380745286
+BELL_EMOJI = "🔔"
+NOBELL_EMOJI = "🔕"
 
 _update_lobbies_lock = asyncio.Lock()
-_bell_emote = None
-_nobell_emote = None
 
 class MapVersion:
     def __init__(self, file_name, ent_only=False, deprecated=False, counterfeit=False, slots=[8,11]):
@@ -929,7 +923,7 @@ class Lobby:
         )
 
     def is_ib(self):
-        #return self.map.find("Legion") != -1 and self.map.find("TD") != -1 # test
+        return self.map.find("Legion") != -1 and self.map.find("TD") != -1 # test
         #return self.map.find("Uther Party") != -1 # test
         return self.map.find("Impossible") != -1 and self.map.find("Bosses") != -1
 
@@ -992,7 +986,7 @@ class Lobby:
         embed.add_field(name="Host", value=host, inline=True)
         embed.add_field(name="Server", value=server, inline=True)
         if len(self.subscribers) > 0:
-            subscribers_string = ""
+            subscribers_string = BELL_EMOJI + " "
             for i in range(0, len(self.subscribers), 4):
                 if i != 0:
                     subscribers_string += "\n"
@@ -1001,8 +995,8 @@ class Lobby:
                 ])
 
             embed.set_footer(
-                text=subscribers_string,
-                icon_url="https://cdn.discordapp.com/emojis/{}.png".format(BELL_EMOJI_ID)
+                text=subscribers_string#,
+                #icon_url="https://cdn.discordapp.com/assets/6201ff6add4821014e02cfc1bc82fc95.svg"
             )
 
         if not open:
@@ -1243,7 +1237,7 @@ async def refresh_ib_lobbies():
         await update_ib_lobbies()
 
 async def lobbies_on_reaction_add(reaction, user):
-    if user.bot or (reaction.emoji != _bell_emote and reaction.emoji != _nobell_emote):
+    if user.bot or (reaction.emoji != BELL_EMOJI and reaction.emoji != NOBELL_EMOJI):
         return
 
     match_lobby = False
@@ -1253,11 +1247,11 @@ async def lobbies_on_reaction_add(reaction, user):
             if reaction.message.id == message_id:
                 match_lobby = True
                 updated = False
-                if reaction.emoji == _bell_emote and user not in lobby.subscribers:
+                if reaction.emoji == BELL_EMOJI and user not in lobby.subscribers:
                     logging.info("User {} subbed to lobby {}".format(user.display_name, lobby))
                     lobby.subscribers.append(user)
                     updated = True
-                if reaction.emoji == _nobell_emote and user in lobby.subscribers:
+                if reaction.emoji == NOBELL_EMOJI and user in lobby.subscribers:
                     logging.info("User {} unsubbed from lobby {}".format(user.display_name, lobby))
                     lobby.subscribers.remove(user)
                     updated = True
