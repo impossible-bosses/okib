@@ -993,11 +993,7 @@ class Lobby:
                 subscribers_string += ", ".join([
                     sub.display_name for sub in self.subscribers[i:i+4]
                 ])
-
-            embed.set_footer(
-                text=subscribers_string#,
-                #icon_url="https://cdn.discordapp.com/assets/6201ff6add4821014e02cfc1bc82fc95.svg"
-            )
+            embed.set_footer(text=subscribers_string)
 
         if not open:
             embed.color = COLOR_CLOSED
