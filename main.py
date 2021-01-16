@@ -827,8 +827,15 @@ class MapVersion:
         self.slots = slots
 
 KNOWN_VERSIONS = [
-    MapVersion("Impossible.Bosses.v1.10.5"),
-    MapVersion("Impossible.Bosses.v1.10.5-ent", ent_only=True),
+    # TODO will keep updating until Battle.Net version release
+    MapVersion("Impossible.Bosses.v1.11.3"),
+    MapVersion("Impossible.Bosses.v1.11.3-ent", ent_only=True),
+    MapVersion("Impossible.Bosses.v1.11.2-ent", ent_only=True, deprecated=True),
+    MapVersion("Impossible.Bosses.v1.11.1-ent", ent_only=True, deprecated=True),
+    MapVersion("Impossible.Bosses.v1.11.0-ent", ent_only=True, deprecated=True),
+
+    MapVersion("Impossible.Bosses.v1.10.5", deprecated=True),
+    MapVersion("Impossible.Bosses.v1.10.5-ent", ent_only=True, deprecated=True),
     MapVersion("Impossible.Bosses.v1.10.4-ent", ent_only=True, deprecated=True),
     MapVersion("Impossible.Bosses.v1.10.3-ent", ent_only=True, deprecated=True),
     MapVersion("Impossible.Bosses.v1.10.2-ent", ent_only=True, deprecated=True),
