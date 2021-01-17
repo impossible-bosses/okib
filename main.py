@@ -870,6 +870,9 @@ async def post_replay(replay):
 
 @_client.command()
 async def unsub(ctx,arg1 = None):
+    await ensure_display(functools.partial(unsub2,ctx,arg1))
+    
+async def unsub2(ctx,arg1):
     if (arg1 == "EU" or arg1 == "eu"):
         await ctx.message.author.remove_roles(_EU_role)
         await ctx.message.channel.send("EU has been succesfully removed from your roles")
@@ -882,6 +885,9 @@ async def unsub(ctx,arg1 = None):
 
 @_client.command()
 async def sub(ctx,arg1 = None):
+    await ensure_display(functools.partial(sub2,ctx,arg1))
+    
+async def sub2(ctx,arg1):
     if (arg1 == "EU" or arg1 == "eu"):
         await ctx.message.author.add_roles(_EU_role)
         await ctx.message.channel.send("EU has been succesfully added in your roles")
@@ -891,6 +897,7 @@ async def sub(ctx,arg1 = None):
     if (arg1 == "KR" or arg1 == "kr"):
         await ctx.message.author.add_roles(_KR_role)
         await ctx.message.channel.send("KR has been succesfully added in your roles")
+
 
 # @_client.command()
 # async def register(ctx,arg1):
