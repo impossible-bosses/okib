@@ -16,6 +16,7 @@ import sys
 import traceback
 import requests
 import params
+import json
 
 ROOT_DIR = os.path.dirname(os.path.realpath(__file__))
 
@@ -425,6 +426,7 @@ async def on_ready():
     global _alive_instances
     global _callbacks
     global _okib_emote
+    global _laterib_emote
     global _noib_emote
     global _EU_role
     global _NA_role
@@ -469,6 +471,7 @@ async def on_ready():
     _NA_role = discord.utils.get(_guild.roles, id=773269638116802661)
     _KR_role = discord.utils.get(_guild.roles, id=800299277842382858)
     _okib_emote = _client.get_emoji(OKIB_EMOJI_ID)
+    _laterib_emote = _client.get_emoji(LATERIB_EMOJI_ID)
     _noib_emote = _client.get_emoji(NOIB_EMOJI_ID)
     logging.info("Bot \"{}\" connected to Discord on guild \"{}\", pub channel \"{}\"".format(_client.user, guild_ib.name, channel_bnet.name))
     await _client.change_presence(activity=None)
@@ -510,6 +513,7 @@ async def on_message(message):
 
 NO_POWER_MSG = "You do not have enough power to perform such an action."
 OKIB_EMOJI_ID = 506072066039087164
+LATERIB_EMOJI_ID = 624308183334125568
 NOIB_EMOJI_ID = 477544228629512193
 IB_EMOJI_ID = 451846742661398528
 IB2_EMOJI_ID = 590986772734017536
@@ -522,8 +526,10 @@ _okib_channel =  None
 _okib_message_id = None
 _list_content = ""
 _okib_emote = None
+_laterib_emote = None
 _noib_emote = None
 _okib_members = []
+_laterib_members = []
 _noib_members = []
 _gatherer = None
 _gathered = False
@@ -533,8 +539,10 @@ async def gather():
     gather_list_string = " ".join([member.mention for member in _okib_members])
     # TODO combine these? can't combine the message sends, but can combine the ensure_display
     # you doing it wront => the purpose of making a encapsulating function is to actually ensuredisplay the whole thing not everything inside it ^^
-    await _okib_channel.send(gather_list_string + " Time to play!")
+    await _okib_channel.send(gather_list_string + " Time to play !")
     await _okib_channel.send(OKIB_EMOJI_STRING)
+    for member in _okib_members:
+        await member.send("Time to play !")
 
 async def combinator3000(*args):
     for f in args:
@@ -552,6 +560,11 @@ async def list_update():
     )
     #await ensure_display((_okib_channel.fetch_message(_okib_message_id)).edit, content=_list_content)
 
+async def check_almost_gather():
+    print(len(_okib_members)+round(0.1+len(_laterib_members)/2))
+    if len(_okib_members)+round(0.1+len(_laterib_members)/2) >= OKIB_GATHER_PLAYERS and not _gathered :
+        for member in _laterib_members:
+            await member.send("Hey, you are :laterib: and our radar indicates that the lobby gather is almost completed !! \nThis might be a great time for you to think about :okib: ;)")
 
 def gather_check():
     global _gathered
@@ -570,25 +583,18 @@ async def up(ctx):
 
     _okib_message = await ctx.send(_list_content)
     await _okib_message.add_reaction(_okib_emote)
+    await _okib_message.add_reaction(_laterib_emote)
     await _okib_message.add_reaction(_noib_emote)
     await ctx.message.delete()
     _okib_message_id = _okib_message.id
     return _okib_message_id
-
-#     _okib_message_id = (await ctx.send(_list_content + '\n' +OKIB_GATHER_EMOJI_STRING)).id
-#     _okib_message = await _okib_channel.fetch_message(_okib_message_id)
-#     await _okib_message.add_reaction(_okib_emote)
-#     await _okib_message.add_reaction(_noib_emote)
-#     await ctx.message.delete()
-#     return _okib_message_id
-
-    
     
 @_client.command()
 async def okib(ctx, arg=None):
     global _okib_channel
     global _okib_message_id
     global _okib_members
+    global _laterib_members
     global _noib_members
     global _gatherer
     global _gathered
@@ -608,6 +614,17 @@ async def okib(ctx, arg=None):
         await ensure_display(ctx.channel.send, "gathering is already in progress in channel " + _okib_channel.mention)
         return
     
+    modify = False
+    for user in ctx.message.mentions:
+        if user not in _okib_members:
+            _okib_members.append(user)
+            modify = True
+        if user in _noib_members:
+            _noib_members.remove(user)
+            modify = True
+        if user in _laterib_members:
+            _laterib_members.remove(user)
+    
     if _okib_channel is None:
         _gatherer = ctx.message.author
         _gather_time = datetime.datetime.now()
@@ -618,21 +635,21 @@ async def okib(ctx, arg=None):
             _gathered = False
             _okib_members = []
             _noib_members = []
+            for user in ctx.message.mentions:
+                if user not in _okib_members:
+                    _okib_members.append(user)
+                if user in _noib_members:
+                    _noib_members.remove(user)
+                if user in _laterib_members:
+                    _laterib_members.remove(user)
 
         _okib_channel = ctx.channel
         await list_update()
         await ensure_display(up,ctx,return_name = "_okib_message_id")
+        modify = False
 
     elif arg == None:
         await ensure_display(up,ctx,return_name = "_okib_message_id")
-    modify = False
-    for user in ctx.message.mentions:
-        if user not in _okib_members:
-            _okib_members.append(user)
-            modify = True
-        if user in _noib_members:
-            _noib_members.remove(user)
-            modify = True
             
     if arg == 'retrieve':
         await list_update()
@@ -646,11 +663,12 @@ async def okib(ctx, arg=None):
             await ensure_display(functools.partial(combinator3000,ctx.message.delete,functools.partial((await _okib_channel.fetch_message(_okib_message_id)).edit,content=_list_content),gather))
             _gathered = True
         else:
-            await ensure_display(functools.partial(combinator3000,ctx.message.delete,functools.partial((await _okib_channel.fetch_message(_okib_message_id)).edit, content=_list_content)))
+            await ensure_display(functools.partial(combinator3000,ctx.message.delete,check_almost_gather,functools.partial((await _okib_channel.fetch_message(_okib_message_id)).edit, content=_list_content)))
 
 @_client.command()
 async def noib(ctx):
     global _okib_members
+    global _laterib_members
     global _noib_members
     global _okib_channel
     global _okib_message_id
@@ -680,6 +698,9 @@ async def noib(ctx):
         if user in _okib_members:
             _okib_members.remove(user)
             modify = True
+        if user in _laterib_members:
+            _laterib_members.remove(user)
+            
     if modify:
         await list_update()
         gather_check()
@@ -687,6 +708,7 @@ async def noib(ctx):
         
 async def okib_on_reaction_add(reaction, user):
     global _okib_members
+    global _laterib_members
     global _noib_members
     global _gathered
     
@@ -701,6 +723,9 @@ async def okib_on_reaction_add(reaction, user):
                     if user in _noib_members:
                         _noib_members.remove(user)
                         modify = True
+                    if user in _laterib_members:
+                        _laterib_members.remove(user)
+                        modify = True
 
                 elif reaction.emoji == _noib_emote:
                     if user not in _noib_members:
@@ -709,7 +734,21 @@ async def okib_on_reaction_add(reaction, user):
                     if user in _okib_members:
                         _okib_members.remove(user)
                         modify = True
-
+                    if user in _laterib_members:
+                        _laterib_members.remove(user)
+                        modify = True
+                
+                elif reaction.emoji == _laterib_emote:
+                    if user not in _laterib_members:
+                        _laterib_members.append(user)
+                        modify = True
+                    if user in _noib_members:
+                        _noib_members.remove(user)
+                        modify = True
+                    if user in _okib_members:
+                        _okib_members.remove(user)
+                        modify = True
+                
             except AttributeError:
                 pass
                 
@@ -720,7 +759,7 @@ async def okib_on_reaction_add(reaction, user):
                     await ensure_display(functools.partial(combinator3000,gather,functools.partial((await _okib_channel.fetch_message(_okib_message_id)).edit,content=_list_content),functools.partial(reaction.remove,user)))
                     _gathered = True
                 else:
-                    await ensure_display(functools.partial(combinator3000,functools.partial((await _okib_channel.fetch_message(_okib_message_id)).edit,content=_list_content),functools.partial(reaction.remove,user)))
+                    await ensure_display(functools.partial(combinator3000,functools.partial((await _okib_channel.fetch_message(_okib_message_id)).edit,content=_list_content),functools.partial(reaction.remove,user),check_almost_gather))
                 return
         #justremove   
         await ensure_display(functools.partial(reaction.remove,user))
@@ -815,17 +854,19 @@ async def check_replay(message):
     if len(att) > 0 :
         if ".w3g" in att[0].filename:
             replay = await att[0].read()
-            code = await post_replay(replay)
-            await ensure_display(message.channel.send, "Replay `"+ att[0].filename +"` sent : " + str(code))
+            r = await post_replay(replay)
+            if r.status_code == 200:
+                replay_response = json.loads(r.text)
+                await ensure_display(message.channel.send, "Replay `"+ att[0].filename +"` sent => https://wc3stats.com/games/" + str(replay_response['body']['id']))
+            else:
+                await ensure_display(message.channel.send, "Replay `"+ att[0].filename +"` sent : " + str(r.status_code))
 
 async def post_replay(replay):
     #replay = open("replay.w3g", "rb")
     file_dic = {
         "file": replay,
-    }
-    r = requests.post("https://api.wc3stats.com/upload", files=file_dic)
-    print(r.content)
-    return r.status_code
+    } 
+    return requests.post("https://api.wc3stats.com/upload", files=file_dic)
 
 @_client.command()
 async def unsub(ctx,arg1 = None):
@@ -850,6 +891,40 @@ async def sub(ctx,arg1 = None):
     if (arg1 == "KR" or arg1 == "kr"):
         await ctx.message.author.add_roles(_KR_role)
         await ctx.message.channel.send("KR has been succesfully added in your roles")
+
+# @_client.command()
+# async def register(ctx,arg1):
+#     if ctx.message.author.roles[-1] < _guild.get_role(params.GRUNT_ID):
+#         await ensure_display(ctx.channel.send, NO_POWER_MSG)
+#         return
+#     
+#     conn = sqlite3.connect(DB_FILE_PATH)
+#     cursor = conn.cursor()
+# 
+#     #check if name is already registered
+#     sqlquery = "SELECT * FROM Players WHERE ent_name = " + name
+#     cursor.execute(sqlquery)
+#     row = cursor.fetchone()
+#     if row is not None:
+#         conn.close()
+#         await ensure_display(ctx.channel.send, "That ENT name has already been registered, no modification were made")
+#         return
+#     
+#     #check if that player has already registered an ENT name, if so => modify the entry
+#     sqlquery = "SELECT RowID FROM Players WHERE Player_id = " + ctx.message.author.id
+#     cursor.execute(sqlquery)
+#     row = cursor.fetchone()
+#     if row is not None:
+#         #delete the value first
+#         RowID = row[0]
+#         sqlquery = "DELETE FROM Players WHERE RowID = " + str(RowID)
+#         cursor.execute(sqlquery)
+#         conn.commit()
+#     sqlquery = "INSERT INTO Players (Player_id,ent_name) VALUES (" + str(ctx.message.author.id) + "," + name + ")"
+#     cursor.execute(sqlquery)
+#     conn.commit()
+#     conn.close()
+
 
 # ==== LOBBIES =====================================================================================
 
@@ -1328,7 +1403,7 @@ if __name__ == "__main__":
     print("Log file: {}".format(log_file_path))
 
     logging.basicConfig(
-        filename=log_file_path, level=logging.INFO,
+        filename=log_file_path, level=logging.WARNING,
         format="%(asctime)s %(levelname)s: %(message)s", datefmt="%Y-%m-%d %H:%M:%S"
     )
     logging.getLogger().addHandler(logging.StreamHandler(sys.stdout))
