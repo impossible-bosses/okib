@@ -327,10 +327,10 @@ async def send_message(channel, *args, **kwargs):
     message = await channel.send(*args, **kwargs)
     return message.id
 
-async def send_message_with_ib_reactions(channel, *args, **kwargs):
+async def send_message_with_bell_reactions(channel, *args, **kwargs):
     message = await channel.send(*args, **kwargs)
-    await message.add_reaction(_okib_emote)
-    await message.add_reaction(_noib_emote)
+    await message.add_reaction(BELL_EMOJI)
+    await message.add_reaction(NOBELL_EMOJI)
     return message.id
 
 async def ensure_display_backup(func, *args, window=2, return_name=None, **kwargs):
@@ -931,6 +931,8 @@ async def sub(ctx,arg1 = None):
 LOBBY_REFRESH_RATE = 5
 QUERY_RETRIES_BEFORE_WARNING = 10
 ENSURE_DISPLAY_WINDOW = LOBBY_REFRESH_RATE * 2
+BELL_EMOJI = "\U0001F514"
+NOBELL_EMOJI = "\U0001F515"
 
 _update_lobbies_lock = asyncio.Lock()
 
@@ -1074,11 +1076,6 @@ class Lobby:
             mark = ":x:"
             message = ":warning: *WARNING: Old map version* :warning:"
 
-        if self.is_ent and _gathered:
-            if message != "":
-                message += "\n"
-            message += " ".join([member.mention for member in _okib_members])
-
         slots_taken = self.slots_taken
         slots_total = self.slots_total
 
@@ -1107,7 +1104,7 @@ class Lobby:
         embed.add_field(name="Host", value=host, inline=True)
         embed.add_field(name="Server", value=server, inline=True)
         if len(self.subscribers) > 0:
-            subscribers_string = ""
+            subscribers_string = BELL_EMOJI + " "
             for i in range(0, len(self.subscribers), 4):
                 if i != 0:
                     subscribers_string += "\n"
@@ -1115,10 +1112,7 @@ class Lobby:
                     sub.display_name for sub in self.subscribers[i:i+4]
                 ])
 
-            embed.set_footer(
-                text=subscribers_string,
-                icon_url="https://cdn.discordapp.com/emojis/{}.png".format(OKIB_EMOJI_ID)
-            )
+            embed.set_footer(text=subscribers_string)
 
         if not open:
             embed.color = COLOR_CLOSED
@@ -1139,7 +1133,7 @@ class Lobby:
 
             logging.info("Creating lobby: {}".format(self))
             key = self.get_message_id_key()
-            await ensure_display(send_message_with_ib_reactions,
+            await ensure_display(send_message_with_bell_reactions,
                 channel, content=message_info["message"], embed=message_info["embed"],
                 window=ENSURE_DISPLAY_WINDOW, return_name=key
             )
@@ -1358,7 +1352,7 @@ async def refresh_ib_lobbies():
         await update_ib_lobbies()
 
 async def lobbies_on_reaction_add(reaction, user):
-    if user.bot or (reaction.emoji != _okib_emote and reaction.emoji != _noib_emote):
+    if user.bot or (reaction.emoji != BELL_EMOJI and reaction.emoji != NOBELL_EMOJI):
         return
 
     match_lobby = False
@@ -1368,11 +1362,11 @@ async def lobbies_on_reaction_add(reaction, user):
             if reaction.message.id == message_id:
                 match_lobby = True
                 updated = False
-                if reaction.emoji == _okib_emote and user not in lobby.subscribers:
+                if reaction.emoji == BELL_EMOJI and user not in lobby.subscribers:
                     logging.info("User {} subbed to lobby {}".format(user.display_name, lobby))
                     lobby.subscribers.append(user)
                     updated = True
-                if reaction.emoji == _noib_emote and user in lobby.subscribers:
+                if reaction.emoji == NOBELL_EMOJI and user in lobby.subscribers:
                     logging.info("User {} unsubbed from lobby {}".format(user.display_name, lobby))
                     lobby.subscribers.remove(user)
                     updated = True
