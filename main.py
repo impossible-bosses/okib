@@ -326,10 +326,10 @@ async def send_message(channel, *args, **kwargs):
     message = await channel.send(*args, **kwargs)
     return message.id
 
-async def send_message_with_bell_reactions(channel, *args, **kwargs):
+async def send_message_with_ib_reactions(channel, *args, **kwargs):
     message = await channel.send(*args, **kwargs)
-    await message.add_reaction(BELL_EMOJI)
-    await message.add_reaction(NOBELL_EMOJI)
+    await message.add_reaction(_okib_emote)
+    await message.add_reaction(_noib_emote)
     return message.id
 
 async def ensure_display_backup(func, *args, window=2, return_name=None, **kwargs):
@@ -426,7 +426,10 @@ async def on_ready():
     global _callbacks
     global _okib_emote
     global _noib_emote
-
+    global _EU_role
+    global _NA_role
+    global _KR_role
+    
     guild_ib = None
     guild_com = None
     for guild in _client.guilds:
@@ -462,6 +465,9 @@ async def on_ready():
     _guild = guild_ib
     _bnet_channel = channel_bnet
     _ent_channel = channel_ent
+    _EU_role = discord.utils.get(_guild.roles, id=766268372252884994)
+    _NA_role = discord.utils.get(_guild.roles, id=773269638116802661)
+    _KR_role = discord.utils.get(_guild.roles, id=800299277842382858)
     _okib_emote = _client.get_emoji(OKIB_EMOJI_ID)
     _noib_emote = _client.get_emoji(NOIB_EMOJI_ID)
     logging.info("Bot \"{}\" connected to Discord on guild \"{}\", pub channel \"{}\"".format(_client.user, guild_ib.name, channel_bnet.name))
@@ -539,8 +545,8 @@ async def list_update():
     
     okib_list_string = ", ".join([member.display_name for member in _okib_members])
     noib_list_string = ", ".join([member.display_name for member in _noib_members])
-    _list_content = "{} asks:\n{} {}/{} : {}\n{} : {}".format(
-        _gatherer.display_name,
+    _list_content = "{} asks : {}\n{} {}/{} : {}\n{} : {}".format(
+        _gatherer.display_name,OKIB_GATHER_EMOJI_STRING,
         OKIB_EMOJI_STRING, len(_okib_members), OKIB_GATHER_PLAYERS, okib_list_string,
         NOIB_EMOJI_STRING, noib_list_string
     )
@@ -548,24 +554,33 @@ async def list_update():
 
 
 def gather_check():
+    global _gathered
     if len(_okib_members) >= OKIB_GATHER_PLAYERS and not _gathered:
         return True
         #ensure_display(functools.partial(combinator3000,(_okib_channel.fetch_message(_okib_message_id)).edit,gather,content=_list_content))) 
     if len(_okib_members) < OKIB_GATHER_PLAYERS and _gathered:
+        _gathered = False
         return False
-        
 
 async def up(ctx):
     global _okib_message_id
     
     if _okib_message_id is not None :
         await (await _okib_channel.fetch_message(_okib_message_id)).delete()
-    _okib_message_id = (await ctx.send(_list_content + '\n' +OKIB_GATHER_EMOJI_STRING)).id
-    _okib_message = await _okib_channel.fetch_message(_okib_message_id)
+
+    _okib_message = await ctx.send(_list_content)
     await _okib_message.add_reaction(_okib_emote)
     await _okib_message.add_reaction(_noib_emote)
     await ctx.message.delete()
+    _okib_message_id = _okib_message.id
     return _okib_message_id
+
+#     _okib_message_id = (await ctx.send(_list_content + '\n' +OKIB_GATHER_EMOJI_STRING)).id
+#     _okib_message = await _okib_channel.fetch_message(_okib_message_id)
+#     await _okib_message.add_reaction(_okib_emote)
+#     await _okib_message.add_reaction(_noib_emote)
+#     await ctx.message.delete()
+#     return _okib_message_id
 
     
     
@@ -588,7 +603,11 @@ async def okib(ctx, arg=None):
     if adv == False and arg != None:
         await ensure_display(ctx.channel.send, NO_POWER_MSG)
         return
-
+    
+    if  _okib_channel is not None and _okib_channel != ctx.channel :
+        await ensure_display(ctx.channel.send, "gathering is already in progress in channel " + _okib_channel.mention)
+        return
+    
     if _okib_channel is None:
         _gatherer = ctx.message.author
         _gather_time = datetime.datetime.now()
@@ -663,6 +682,7 @@ async def noib(ctx):
             modify = True
     if modify:
         await list_update()
+        gather_check()
         await ensure_display(functools.partial(combinator3000,ctx.message.delete,functools.partial((await _okib_channel.fetch_message(_okib_message_id)).edit, content=_list_content)))
         
 async def okib_on_reaction_add(reaction, user):
@@ -807,14 +827,35 @@ async def post_replay(replay):
     print(r.content)
     return r.status_code
 
+@_client.command()
+async def unsub(ctx,arg1 = None):
+    if (arg1 == "EU" or arg1 == "eu"):
+        await ctx.message.author.remove_roles(_EU_role)
+        await ctx.message.channel.send("EU has been succesfully removed from your roles")
+    if (arg1 == "NA" or arg1 == "na"):
+        await ctx.message.author.remove_roles(_NA_role)
+        await ctx.message.channel.send("NA has been succesfully removed from your roles")
+    if (arg1 == "KR" or arg1 == "kr"):
+        await ctx.message.author.remove_roles(_KR_role)
+        await ctx.message.channel.send("KR has been succesfully removed from your roles")
+
+@_client.command()
+async def sub(ctx,arg1 = None):
+    if (arg1 == "EU" or arg1 == "eu"):
+        await ctx.message.author.add_roles(_EU_role)
+        await ctx.message.channel.send("EU has been succesfully added in your roles")
+    if (arg1 == "NA" or arg1 == "na"):
+        await ctx.message.author.add_roles(_NA_role)
+        await ctx.message.channel.send("NA has been succesfully added in your roles")
+    if (arg1 == "KR" or arg1 == "kr"):
+        await ctx.message.author.add_roles(_KR_role)
+        await ctx.message.channel.send("KR has been succesfully added in your roles")
 
 # ==== LOBBIES =====================================================================================
 
 LOBBY_REFRESH_RATE = 5
 QUERY_RETRIES_BEFORE_WARNING = 10
 ENSURE_DISPLAY_WINDOW = LOBBY_REFRESH_RATE * 2
-BELL_EMOJI = "🔔"
-NOBELL_EMOJI = "🔕"
 
 _update_lobbies_lock = asyncio.Lock()
 
@@ -958,6 +999,11 @@ class Lobby:
             mark = ":x:"
             message = ":warning: *WARNING: Old map version* :warning:"
 
+        if self.is_ent and _gathered:
+            if message != "":
+                message += "\n"
+            message += " ".join([member.mention for member in _okib_members])
+
         slots_taken = self.slots_taken
         slots_total = self.slots_total
 
@@ -986,14 +1032,18 @@ class Lobby:
         embed.add_field(name="Host", value=host, inline=True)
         embed.add_field(name="Server", value=server, inline=True)
         if len(self.subscribers) > 0:
-            subscribers_string = BELL_EMOJI + " "
+            subscribers_string = ""
             for i in range(0, len(self.subscribers), 4):
                 if i != 0:
                     subscribers_string += "\n"
                 subscribers_string += ", ".join([
                     sub.display_name for sub in self.subscribers[i:i+4]
                 ])
-            embed.set_footer(text=subscribers_string)
+
+            embed.set_footer(
+                text=subscribers_string,
+                icon_url="https://cdn.discordapp.com/emojis/{}.png".format(OKIB_EMOJI_ID)
+            )
 
         if not open:
             embed.color = COLOR_CLOSED
@@ -1014,7 +1064,7 @@ class Lobby:
 
             logging.info("Creating lobby: {}".format(self))
             key = self.get_message_id_key()
-            await ensure_display(send_message_with_bell_reactions,
+            await ensure_display(send_message_with_ib_reactions,
                 channel, content=message_info["message"], embed=message_info["embed"],
                 window=ENSURE_DISPLAY_WINDOW, return_name=key
             )
@@ -1233,7 +1283,7 @@ async def refresh_ib_lobbies():
         await update_ib_lobbies()
 
 async def lobbies_on_reaction_add(reaction, user):
-    if user.bot or (reaction.emoji != BELL_EMOJI and reaction.emoji != NOBELL_EMOJI):
+    if user.bot or (reaction.emoji != _okib_emote and reaction.emoji != _noib_emote):
         return
 
     match_lobby = False
@@ -1243,11 +1293,11 @@ async def lobbies_on_reaction_add(reaction, user):
             if reaction.message.id == message_id:
                 match_lobby = True
                 updated = False
-                if reaction.emoji == BELL_EMOJI and user not in lobby.subscribers:
+                if reaction.emoji == _okib_emote and user not in lobby.subscribers:
                     logging.info("User {} subbed to lobby {}".format(user.display_name, lobby))
                     lobby.subscribers.append(user)
                     updated = True
-                if reaction.emoji == NOBELL_EMOJI and user in lobby.subscribers:
+                if reaction.emoji == _noib_emote and user in lobby.subscribers:
                     logging.info("User {} unsubbed from lobby {}".format(user.display_name, lobby))
                     lobby.subscribers.remove(user)
                     updated = True
