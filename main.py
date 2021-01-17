@@ -103,7 +103,7 @@ print("Source version {}".format(VERSION))
 # discord connection
 client_intents = discord.Intents().default()
 client_intents.members = True
-_client = discord.ext.commands.Bot(command_prefix="!", intents=client_intents)
+_client = discord.ext.commands.Bot(command_prefix="+", intents=client_intents)
 _guild = None
 _bnet_channel = None
 _ent_channel = None
@@ -581,12 +581,12 @@ async def up(ctx):
     if _okib_message_id is not None :
         await (await _okib_channel.fetch_message(_okib_message_id)).delete()
 
-    _okib_message = await ctx.send(_list_content)
-    await _okib_message.add_reaction(_okib_emote)
-    await _okib_message.add_reaction(_laterib_emote)
-    await _okib_message.add_reaction(_noib_emote)
+    okib_message = await ctx.send(_list_content)
+    await okib_message.add_reaction(_okib_emote)
+    await okib_message.add_reaction(_laterib_emote)
+    await okib_message.add_reaction(_noib_emote)
     await ctx.message.delete()
-    _okib_message_id = _okib_message.id
+    _okib_message_id = okib_message.id
     return _okib_message_id
     
 @_client.command()
@@ -1404,7 +1404,7 @@ if __name__ == "__main__":
     print("Log file: {}".format(log_file_path))
 
     logging.basicConfig(
-        filename=log_file_path, level=logging.WARNING,
+        filename=log_file_path, level=logging.INFO,
         format="%(asctime)s %(levelname)s: %(message)s", datefmt="%Y-%m-%d %H:%M:%S"
     )
     logging.getLogger().addHandler(logging.StreamHandler(sys.stdout))
