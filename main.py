@@ -104,6 +104,8 @@ print("Source version {}".format(VERSION))
 client_intents = discord.Intents().default()
 client_intents.members = True
 _client = discord.ext.commands.Bot(command_prefix="!", intents=client_intents)
+_client.remove_command("help")
+
 _guild = None
 _bnet_channel = None
 _ent_channel = None
