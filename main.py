@@ -554,7 +554,7 @@ async def gather():
 
 async def combinator3000(*args):
     for f in args:
-        await f
+        await f()
         
 async def list_update():
     global _list_content
