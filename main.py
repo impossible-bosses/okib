@@ -544,11 +544,17 @@ async def gather():
     await _okib_channel.send(gather_list_string + " Time to play !")
     await _okib_channel.send(OKIB_EMOJI_STRING)
     for member in _okib_members:
-        await member.send("Time to play !")
+        try:
+            await member.send("Time to play !")
+        except Exception as e:
+            #Should be an logging.error there but since this might happen quite frequently i dont want it to show as "abnormal"
+            logging.warning("Error sending DM to {}, {}".format(member.name, e))
+            traceback.print_exc()
+        
 
 async def combinator3000(*args):
     for f in args:
-        await f()
+        await f
         
 async def list_update():
     global _list_content
@@ -563,11 +569,16 @@ async def list_update():
     #await ensure_display((_okib_channel.fetch_message(_okib_message_id)).edit, content=_list_content)
 
 async def check_almost_gather():
-    print(len(_okib_members)+round(0.1+len(_laterib_members)/2))
+    #print(len(_okib_members)+round(0.1+len(_laterib_members)/2))
     if len(_okib_members)+round(0.1+len(_laterib_members)/2) >= OKIB_GATHER_PLAYERS and not _gathered :
         for member in _laterib_members:
-            await member.send("Hey, you are :laterib: and our radar indicates that the lobby gather is almost completed !! \nThis might be a great time for you to think about :okib: ;)")
-
+            try:
+                await member.send("Hey, you are :laterib: and our radar indicates that the lobby gather is almost completed !! \nThis might be a great time for you to think about :okib: ;)")
+            except Exception as e:
+                #Should be an logging.error there but since this might happen quite frequently i dont want it to show as "abnormal"
+                logging.warning("Error sending DM to {}, {}".format(member.name, e))
+                traceback.print_exc()
+            
 def gather_check():
     global _gathered
     if len(_okib_members) >= OKIB_GATHER_PLAYERS and not _gathered:
@@ -727,7 +738,6 @@ async def okib_on_reaction_add(reaction, user):
                         modify = True
                     if user in _laterib_members:
                         _laterib_members.remove(user)
-                        modify = True
 
                 elif reaction.emoji == _noib_emote:
                     if user not in _noib_members:
@@ -738,12 +748,10 @@ async def okib_on_reaction_add(reaction, user):
                         modify = True
                     if user in _laterib_members:
                         _laterib_members.remove(user)
-                        modify = True
                 
                 elif reaction.emoji == _laterib_emote:
                     if user not in _laterib_members:
                         _laterib_members.append(user)
-                        modify = True
                     if user in _noib_members:
                         _noib_members.remove(user)
                         modify = True
