@@ -19,7 +19,7 @@ import params
 import json
 
 from lobbies import Lobby, BELL_EMOJI, NOBELL_EMOJI
-from replays import ReplayData
+from replays import ReplayData, replays_load_emojis
 
 ROOT_DIR = os.path.dirname(os.path.realpath(__file__))
 
@@ -478,6 +478,8 @@ async def on_ready():
     _okib_emote = _client.get_emoji(OKIB_EMOJI_ID)
     _laterib_emote = _client.get_emoji(LATERIB_EMOJI_ID)
     _noib_emote = _client.get_emoji(NOIB_EMOJI_ID)
+    replays_load_emojis(_guild.emojis)
+
     logging.info("Bot \"{}\" connected to Discord on guild \"{}\", pub channel \"{}\"".format(_client.user, guild_ib.name, channel_bnet.name))
     await _client.change_presence(activity=None)
     _com_channel = channel_com
@@ -860,6 +862,8 @@ async def pedigree(ctx):
 # ==== MISC ========================================================================================
 
 async def check_replay(message):
+    ENSURE_DISPLAY_WINDOW = 30
+
     if len(message.attachments) == 0:
         return
 
@@ -868,22 +872,30 @@ async def check_replay(message):
         return
 
     replay = await att.read()
-    timeout = aiohttp.ClientTimeout(total=60)
+    timeout = aiohttp.ClientTimeout(total=ENSURE_DISPLAY_WINDOW)
     async with aiohttp.ClientSession(timeout=timeout) as session:
-        response = await session.post("https://api.wc3stats.com/upload", data=replay)
-        if response.status_code != 200:
-            await ensure_display(message.channel.send, "Failed to upload replay \"{}\" with status {}".format(att.filename, response.status_code))
+        response = await session.post("https://api.wc3stats.com/upload", data={
+            "file": replay
+        })
+        if response.status != 200:
+            logging.error(await response.text())
+            await ensure_display(message.channel.send, "Failed to upload replay `{}` with status `{}`".format(att.filename, response.status), window=ENSURE_DISPLAY_WINDOW)
             return
 
         response_json = await response.json()
         replay_id = response_json["body"]["id"]
-        response_get = await session.get("https://api.wc3stats.com/replays/" + replay_id)
-        if response_get.status_code != 200:
-            await ensure_display(message.channel.send, "Uploaded replay \"{}\" => https://wc3stats.com/games/{}".format(att.filename, replay_id))
+        fallback_message = "Uploaded replay `{}` => https://wc3stats.com/games/{}".format(att.filename, replay_id)
+        try:
+            replay_data = ReplayData(response_json)
+        except Exception as e:
+            logging.error("Failed to parse replay data, id {}".format(replay_id))
+            traceback.print_exc()
+            await ensure_display(message.channel.send, fallback_message, window=ENSURE_DISPLAY_WINDOW)
             return
 
-        response_get_json = await response_get.json()
-        game_data = ReplayData(response_get_json)
+        content = "Uploaded replay `{}`:".format(att.filename)
+        embed = replay_data.to_discord_embed()
+        await ensure_display(message.channel.send, content=content, embed=embed, window=ENSURE_DISPLAY_WINDOW)
 
 @_client.command()
 async def unsub(ctx, arg1=None):

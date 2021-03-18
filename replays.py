@@ -1,19 +1,25 @@
+import discord
 from enum import Enum, unique
+import logging
+
+from lobbies import get_map_version
+
+_class_emoji = None
 
 @unique
 class Difficulty(Enum):
-    VERY_EASY = "Very Easy"
-    EASY = "Easy"
-    MODERATE = "Moderate"
-    NORMAL = "Normal"
-    HARD = "Hard"
+    VE = "Very Easy"
+    E = "Easy"
+    M = "Moderate"
+    N = "Normal"
+    H = "Hard"
 
 @unique
 class Class(Enum):
-    DEATH_KNIGHT = "Death Knight"
+    DK = "Death Knight"
     DRUID = "Druid"
-    FIRE_MAGE = "Fire Mage"
-    ICE_MAGE = "Ice Mage"
+    FM = "Fire Mage"
+    IM = "Ice Mage"
     PALADIN = "Paladin"
     PRIEST = "Priest"
     RANGER = "Ranger"
@@ -33,6 +39,30 @@ class Boss(Enum):
     LIGHT = "light"
     ANCIENT = "ancient"
     DEMONIC = "demonic"
+
+def max_bosses_in_difficulty(d):
+    if d == Difficulty.VE:
+        return 8
+    if d == Difficulty.E:
+        return 9
+    if d == Difficulty.M:
+        return 9
+    if d == Difficulty.N:
+        return 10
+    if d == Difficulty.H:
+        return 10
+
+def difficulty_to_short_string(d):
+    if d == Difficulty.VE:
+        return "VE"
+    if d == Difficulty.E:
+        return "E"
+    if d == Difficulty.M:
+        return "M"
+    if d == Difficulty.N:
+        return "N"
+    if d == Difficulty.H:
+        return "H"
 
 class PlayerStats:
     def __init__(self, json):
@@ -57,31 +87,32 @@ class PlayerData:
         self.ms = mmd_vars["movementSpeed"]
         self.coins = mmd_vars["coins"]
         self.stats_overall = PlayerStats(mmd_vars)
+        self.boss_kills = 0
         self.stats_boss = {}
         for boss in Boss:
             mmd_vars_boss = {}
             for k, v in mmd_vars.items():
                 if k[:len(boss.value)] == boss.value:
-                    k_trim = k[len(boss.value):]
-                    if len(k_trim) > 0:
-                        k_trim[0] = lower(k_trim[0])
-                        mmd_vars_boss[k_trim] = v
+                    k_trim = k[len(boss.value)].lower() + k[len(boss.value)+1:]
+                    mmd_vars_boss[k_trim] = v
             self.stats_boss[boss] = PlayerStats(mmd_vars_boss)
+            if self.stats_boss[boss].deaths is not None:
+                self.boss_kills += 1
 
 class ReplayData:
     def __init__(self, json):
         game = json["body"]["data"]["game"]
         self.id = json["body"]["id"]
         self.game_name = game["name"]
-        self.map = game["map"]
+        self.map = game["map"][:-4]
         self.host = game["host"]
-        self.players = [PlayerData(player) for player in game["players"]]
+
         flag = None
         difficulty = None
         continues = None
         for player in game["players"]:
             if len(player["flags"]) != 1:
-                raise ValueError("more than 1 flag for player: {}".format(player))
+                raise ValueError("{} flags for player, expected 1: {}".format(len(player["flags"]), player))
 
             flag_player = player["flags"][0]
             if flag == None:
@@ -95,7 +126,7 @@ class ReplayData:
             elif difficulty != difficulty_player:
                 raise ValueError("Inconsistent difficulties: {} and {}".format(difficulty, difficulty_player))
 
-            continues_player = player["variables"]["continues"]
+            continues_player = player["variables"]["contines"]
             if continues == None:
                 continues = continues_player
             elif continues != continues_player:
@@ -116,3 +147,58 @@ class ReplayData:
             self.continues = False
         else:
             raise ValueError("Invalid continues: {}".format(continues))
+
+        self.players = [PlayerData(p) for p in game["players"]]
+        self.boss_kills = None
+        if not self.win:
+            self.boss_kills = max([p.boss_kills for p in self.players])
+
+    def to_discord_embed(self):
+        if _class_emoji is None:
+            logging.error("replays module used before loading emojis")
+            return
+
+        title = "{} - {}".format(
+            difficulty_to_short_string(self.difficulty),
+            "Victory!" if self.win else "Defeat"
+        )
+        if not self.win:
+            title += " ({}/{})".format(self.boss_kills, max_bosses_in_difficulty(self.difficulty))
+        players_str = ""
+        for player in self.players:
+            players_str += "{} {}\n".format(_class_emoji[player.class_], player.name)
+        url = "https://wc3stats.com/games/{}".format(self.id)
+
+        embed = discord.Embed(title=title, description=players_str, url=url)
+        embed.set_footer(text=self.map)
+        return embed
+
+def replays_load_emojis(guild_emojis):
+    global _class_emoji
+    _class_emoji = {}
+
+    for emoji in guild_emojis:
+        if emoji.name == "dk":
+            _class_emoji[Class.DK] = emoji
+        if emoji.name == "druid":
+            _class_emoji[Class.DRUID] = emoji
+        if emoji.name == "fm":
+            _class_emoji[Class.FM] = emoji
+        if emoji.name == "im":
+            _class_emoji[Class.IM] = emoji
+        if emoji.name == "pala":
+            _class_emoji[Class.PALADIN] = emoji
+        if emoji.name == "priest":
+            _class_emoji[Class.PRIEST] = emoji
+        if emoji.name == "ranger":
+            _class_emoji[Class.RANGER] = emoji
+        if emoji.name == "rog":
+            _class_emoji[Class.ROGUE] = emoji
+        if emoji.name == "wl":
+            _class_emoji[Class.WARLOCK] = emoji
+        if emoji.name == "demonwar":
+            _class_emoji[Class.WARRIOR] = emoji
+
+    if len(_class_emoji) != 10:
+        raise Exception("Missing class emoji, {}/10: ".format(len(_class_emoji), _class_emoji))
+    logging.info("Loaded all class emoji for replays module")

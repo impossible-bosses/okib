@@ -112,7 +112,7 @@ class Lobby:
         return "lobbymsg{}".format(self.id)
 
     def is_ib(self):
-        return self.map.find("Legion") != -1 and self.map.find("TD") != -1 # test
+        #return self.map.find("Legion") != -1 and self.map.find("TD") != -1 # test
         #return self.map.find("Uther Party") != -1 # test
         return self.map.find("Impossible") != -1 and self.map.find("Bosses") != -1
 
