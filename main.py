@@ -1096,7 +1096,7 @@ async def update_bnet_lobbies(session, prev_lobbies):
 
     lobbies = [Lobby(obj, is_ent=False) for obj in body]
     ib_lobbies = [lobby for lobby in lobbies if lobby.is_ib()]
-    logging.info("wc3stats: {}/{} IB lobbies".format(len(ib_lobbies), len(lobbies)))
+    logging.debug("wc3stats: {}/{} IB lobbies".format(len(ib_lobbies), len(lobbies)))
     return await report_lobbies(prev_lobbies, ib_lobbies)
 
 async def update_ent_lobbies(session, prev_lobbies):
@@ -1107,7 +1107,7 @@ async def update_ent_lobbies(session, prev_lobbies):
 
     lobbies = [Lobby(obj, is_ent=True) for obj in response_json]
     ib_lobbies = [lobby for lobby in lobbies if lobby.is_ib()]
-    logging.info("ENT: {}/{} IB lobbies".format(len(ib_lobbies), len(lobbies)))
+    logging.debug("ENT: {}/{} IB lobbies".format(len(ib_lobbies), len(lobbies)))
     return await report_lobbies(prev_lobbies, ib_lobbies)
 
 async def update_ib_lobbies():
@@ -1185,7 +1185,7 @@ async def refresh_ib_lobbies():
     if not _initialized:
         return
 
-    logging.info("Refreshing lobby list")
+    logging.debug("Refreshing lobby list")
     async with _update_lobbies_lock:
         await update_ib_lobbies()
 
