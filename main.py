@@ -874,10 +874,12 @@ async def check_replay(message):
     replay = await att.read()
     timeout = aiohttp.ClientTimeout(total=ENSURE_DISPLAY_WINDOW)
     async with aiohttp.ClientSession(timeout=timeout) as session:
+        logging.info("Uploading replay {}".format(att.filename))
         response = await session.post("https://api.wc3stats.com/upload", data={
             "file": replay
         })
         if response.status != 200:
+            logging.error("Replay upload failed")
             logging.error(await response.text())
             await ensure_display(message.channel.send, "Failed to upload replay `{}` with status `{}`".format(att.filename, response.status), window=ENSURE_DISPLAY_WINDOW)
             return
