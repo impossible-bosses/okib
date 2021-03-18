@@ -126,7 +126,11 @@ class ReplayData:
             elif difficulty != difficulty_player:
                 raise ValueError("Inconsistent difficulties: {} and {}".format(difficulty, difficulty_player))
 
-            continues_player = player["variables"]["contines"]
+            if "contines" in player["variables"]:
+                # I had a typo in the IB map...
+                continues_player = player["variables"]["contines"]
+            else:
+                continues_player = player["variables"]["continues"]
             if continues == None:
                 continues = continues_player
             elif continues != continues_player:
