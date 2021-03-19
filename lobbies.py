@@ -127,16 +127,16 @@ class Lobby:
         message = ""
         if version is None:
             mark = ":question:"
-            message = ":warning: *WARNING: Unknown map version* :warning:"
+            message = ":warning: *Unknown map version* :warning:"
         elif version.counterfeit:
             mark = ":x:"
-            message = ":warning: *WARNING: Counterfeit version* :warning:"
+            message = ":warning: *Counterfeit version* :warning:"
         elif not self.is_ent and version.ent_only:
             mark = ":x:"
-            message = ":warning: *WARNING: Incompatible version* :warning:"
+            message = ":warning: *Incompatible version* :warning:"
         elif version.deprecated:
             mark = ":x:"
-            message = ":warning: *WARNING: Old map version* :warning:"
+            message = ":warning: *Old map version* :warning:"
 
         slots_taken = self.slots_taken
         slots_total = self.slots_total
