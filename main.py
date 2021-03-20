@@ -37,6 +37,7 @@ def get_source_version():
         raise Exception("HEAD commit sha not found: {}".format(repo.head.commit.hexsha))
     return total - index
 
+@unique
 class MessageType(Enum):
     CONNECT = "connect"
     CONNECT_ACK = "connectack"
