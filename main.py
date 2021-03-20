@@ -8,15 +8,14 @@ from enum import Enum, unique
 import functools
 import git
 import io
+import json
 import logging
 import os
+import params
 import pickle
 import sqlite3
 import sys
 import traceback
-import requests
-import params
-import json
 
 from lobbies import Lobby, BELL_EMOJI, NOBELL_EMOJI
 from replays import ReplayData, replays_load_emojis
