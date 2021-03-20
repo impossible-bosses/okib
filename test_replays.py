@@ -44,8 +44,8 @@ class TestCaseWc3Stats:
 def test_wc3stats_replay(test_case):
 	r = requests.get("https://api.wc3stats.com/replays/{}".format(test_case.replay_id))
 	assert r.status_code == 200
-	data = ReplayData(r.json())
 
+	data = ReplayData(r.json())
 	assert data.id == test_case.replay_id
 	assert data.map == test_case.map_file
 	assert data.difficulty == test_case.difficulty
