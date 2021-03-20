@@ -70,7 +70,11 @@ class PlayerStats:
         self.dmg = json["damage"]
         self.hl = json["healing"]
         self.hlr = json["healingReceived"]
-        self.hlrSw = json["sWHealingReceived"]
+        if "sWHealingReceived" not in json:
+            # Data completeness issue
+            self.hlrSw = None
+        else:
+            self.hlrSw = json["sWHealingReceived"]
         self.degen = json["degen"]
 
 class PlayerData:
@@ -111,14 +115,12 @@ class ReplayData:
         difficulty = None
         continues = None
         for player in game["players"]:
-            if len(player["flags"]) != 1:
-                raise ValueError("{} flags for player, expected 1: {}".format(len(player["flags"]), player))
-
-            flag_player = player["flags"][0]
-            if flag == None:
-                flag = flag_player
-            elif flag != flag_player:
-                raise ValueError("Inconsistent flags: {} and {}".format(flag, flag_player))
+            if len(player["flags"]) == 1:
+                flag_player = player["flags"][0]
+                if flag == None:
+                    flag = flag_player
+                elif flag != flag_player:
+                    raise ValueError("Inconsistent flags: {} and {}".format(flag, flag_player))
 
             difficulty_player = player["variables"]["difficulty"]
             if difficulty == None:
@@ -140,6 +142,8 @@ class ReplayData:
             self.win = True
         elif flag == "loser":
             self.win = False
+        elif flag == None:
+            raise ValueError("No flag values found")
         else:
             raise ValueError("Invalid flag: {}".format(flag))
 
