@@ -136,7 +136,7 @@ class ReplayData:
             if continues == None:
                 continues = continues_player
             elif continues != continues_player:
-                raise ValueError("Inconsistent difficulties: {} and {}".format(continues, continues_player))
+                raise ValueError("Inconsistent continues: {} and {}".format(continues, continues_player))
 
         if flag == "winner":
             self.win = True
