@@ -562,12 +562,11 @@ async def list_update():
     okib_list_string = ", ".join([member.display_name for member in _okib_members])
     noib_list_string = ", ".join([member.display_name for member in _noib_members])
     _list_content_embed = discord.Embed(
-        description="{} asks:\n{} {}/{} : {}\n{} : {}".format(
-            _gatherer.display_name,
+        description="{} {}/{} : {}\n{} : {}".format(
             OKIB_EMOJI_STRING, len(_okib_members), OKIB_GATHER_PLAYERS, okib_list_string,
             NOIB_EMOJI_STRING, noib_list_string
         )
-    )
+    ).set_footer(text="(started by {})".format(_gatherer.display_name))
 
 async def check_almost_gather():
     #print(len(_okib_members)+round(0.1+len(_laterib_members)/2))
