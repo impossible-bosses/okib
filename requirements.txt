@@ -1,4 +1,5 @@
 aiohttp
 discord.py
 gitpython
+pytest
 requests
