@@ -4,18 +4,21 @@ import datetime
 import discord
 from discord.ext.tasks import loop
 from discord.ext import commands
-from enum import Enum, auto
+from enum import Enum, unique
 import functools
 import git
 import io
+import json
 import logging
 import os
+import params
 import pickle
 import sqlite3
 import sys
 import traceback
-import requests
-import params
+
+from lobbies import Lobby, BELL_EMOJI, NOBELL_EMOJI
+from replays import ReplayData, replays_load_emojis
 
 ROOT_DIR = os.path.dirname(os.path.realpath(__file__))
 
@@ -34,6 +37,7 @@ def get_source_version():
         raise Exception("HEAD commit sha not found: {}".format(repo.head.commit.hexsha))
     return total - index
 
+@unique
 class MessageType(Enum):
     CONNECT = "connect"
     CONNECT_ACK = "connectack"
@@ -103,6 +107,8 @@ print("Source version {}".format(VERSION))
 client_intents = discord.Intents().default()
 client_intents.members = True
 _client = discord.ext.commands.Bot(command_prefix="!", intents=client_intents)
+_client.remove_command("help")
+
 _guild = None
 _bnet_channel = None
 _ent_channel = None
@@ -425,8 +431,12 @@ async def on_ready():
     global _alive_instances
     global _callbacks
     global _okib_emote
+    global _laterib_emote
     global _noib_emote
-
+    global _EU_role
+    global _NA_role
+    global _KR_role
+    
     guild_ib = None
     guild_com = None
     for guild in _client.guilds:
@@ -462,8 +472,14 @@ async def on_ready():
     _guild = guild_ib
     _bnet_channel = channel_bnet
     _ent_channel = channel_ent
+    _EU_role = discord.utils.get(_guild.roles, id=766268372252884994)
+    _NA_role = discord.utils.get(_guild.roles, id=773269638116802661)
+    _KR_role = discord.utils.get(_guild.roles, id=800299277842382858)
     _okib_emote = _client.get_emoji(OKIB_EMOJI_ID)
+    _laterib_emote = _client.get_emoji(LATERIB_EMOJI_ID)
     _noib_emote = _client.get_emoji(NOIB_EMOJI_ID)
+    replays_load_emojis(_guild.emojis)
+
     logging.info("Bot \"{}\" connected to Discord on guild \"{}\", pub channel \"{}\"".format(_client.user, guild_ib.name, channel_bnet.name))
     await _client.change_presence(activity=None)
     _com_channel = channel_com
@@ -494,9 +510,6 @@ async def on_message(message):
                 attachment = message.attachments[0]
             await parse_bot_com(from_id, message_type, content, attachment)
     else:
-        # TODO temporary
-        if message.content == "!getgames":
-            await do_getgames(message.channel, message)
         await check_replay(message)
         await _client.process_commands(message)
 
@@ -504,6 +517,7 @@ async def on_message(message):
 
 NO_POWER_MSG = "You do not have enough power to perform such an action."
 OKIB_EMOJI_ID = 506072066039087164
+LATERIB_EMOJI_ID = 624308183334125568
 NOIB_EMOJI_ID = 477544228629512193
 IB_EMOJI_ID = 451846742661398528
 IB2_EMOJI_ID = 590986772734017536
@@ -516,8 +530,10 @@ _okib_channel =  None
 _okib_message_id = None
 _list_content = ""
 _okib_emote = None
+_laterib_emote = None
 _noib_emote = None
 _okib_members = []
+_laterib_members = []
 _noib_members = []
 _gatherer = None
 _gathered = False
@@ -527,8 +543,16 @@ async def gather():
     gather_list_string = " ".join([member.mention for member in _okib_members])
     # TODO combine these? can't combine the message sends, but can combine the ensure_display
     # you doing it wront => the purpose of making a encapsulating function is to actually ensuredisplay the whole thing not everything inside it ^^
-    await _okib_channel.send(gather_list_string + " Time to play!")
+    await _okib_channel.send(gather_list_string + " Time to play !")
     await _okib_channel.send(OKIB_EMOJI_STRING)
+    for member in _okib_members:
+        try:
+            await member.send("Time to play !")
+        except Exception as e:
+            #Should be an logging.error there but since this might happen quite frequently i dont want it to show as "abnormal"
+            logging.warning("Error sending DM to {}, {}".format(member.name, e))
+            traceback.print_exc()
+        
 
 async def combinator3000(*args):
     for f in args:
@@ -539,41 +563,53 @@ async def list_update():
     
     okib_list_string = ", ".join([member.display_name for member in _okib_members])
     noib_list_string = ", ".join([member.display_name for member in _noib_members])
-    _list_content = "{} asks:\n{} {}/{} : {}\n{} : {}".format(
-        _gatherer.display_name,
+    _list_content = "{} asks : {}\n{} {}/{} : {}\n{} : {}".format(
+        _gatherer.display_name,OKIB_GATHER_EMOJI_STRING,
         OKIB_EMOJI_STRING, len(_okib_members), OKIB_GATHER_PLAYERS, okib_list_string,
         NOIB_EMOJI_STRING, noib_list_string
     )
     #await ensure_display((_okib_channel.fetch_message(_okib_message_id)).edit, content=_list_content)
 
-
+async def check_almost_gather():
+    #print(len(_okib_members)+round(0.1+len(_laterib_members)/2))
+    if len(_okib_members)+round(0.1+len(_laterib_members)/2) >= OKIB_GATHER_PLAYERS and not _gathered :
+        for member in _laterib_members:
+            try:
+                await member.send("Hey, you are :laterib: and our radar indicates that the lobby gather is almost completed !! \nThis might be a great time for you to think about :okib: ;)")
+            except Exception as e:
+                #Should be an logging.error there but since this might happen quite frequently i dont want it to show as "abnormal"
+                logging.warning("Error sending DM to {}, {}".format(member.name, e))
+                traceback.print_exc()
+            
 def gather_check():
+    global _gathered
     if len(_okib_members) >= OKIB_GATHER_PLAYERS and not _gathered:
         return True
         #ensure_display(functools.partial(combinator3000,(_okib_channel.fetch_message(_okib_message_id)).edit,gather,content=_list_content))) 
     if len(_okib_members) < OKIB_GATHER_PLAYERS and _gathered:
+        _gathered = False
         return False
-        
 
 async def up(ctx):
     global _okib_message_id
     
     if _okib_message_id is not None :
         await (await _okib_channel.fetch_message(_okib_message_id)).delete()
-    _okib_message_id = (await ctx.send(_list_content + '\n' +OKIB_GATHER_EMOJI_STRING)).id
-    _okib_message = await _okib_channel.fetch_message(_okib_message_id)
-    await _okib_message.add_reaction(_okib_emote)
-    await _okib_message.add_reaction(_noib_emote)
-    await ctx.message.delete()
-    return _okib_message_id
 
-    
+    okib_message = await ctx.send(_list_content)
+    await okib_message.add_reaction(_okib_emote)
+    await okib_message.add_reaction(_laterib_emote)
+    await okib_message.add_reaction(_noib_emote)
+    await ctx.message.delete()
+    _okib_message_id = okib_message.id
+    return _okib_message_id
     
 @_client.command()
 async def okib(ctx, arg=None):
     global _okib_channel
     global _okib_message_id
     global _okib_members
+    global _laterib_members
     global _noib_members
     global _gatherer
     global _gathered
@@ -588,7 +624,22 @@ async def okib(ctx, arg=None):
     if adv == False and arg != None:
         await ensure_display(ctx.channel.send, NO_POWER_MSG)
         return
-
+    
+    if  _okib_channel is not None and _okib_channel != ctx.channel :
+        await ensure_display(ctx.channel.send, "gathering is already in progress in channel " + _okib_channel.mention)
+        return
+    
+    modify = False
+    for user in ctx.message.mentions:
+        if user not in _okib_members:
+            _okib_members.append(user)
+            modify = True
+        if user in _noib_members:
+            _noib_members.remove(user)
+            modify = True
+        if user in _laterib_members:
+            _laterib_members.remove(user)
+    
     if _okib_channel is None:
         _gatherer = ctx.message.author
         _gather_time = datetime.datetime.now()
@@ -599,21 +650,21 @@ async def okib(ctx, arg=None):
             _gathered = False
             _okib_members = []
             _noib_members = []
+            for user in ctx.message.mentions:
+                if user not in _okib_members:
+                    _okib_members.append(user)
+                if user in _noib_members:
+                    _noib_members.remove(user)
+                if user in _laterib_members:
+                    _laterib_members.remove(user)
 
         _okib_channel = ctx.channel
         await list_update()
         await ensure_display(up,ctx,return_name = "_okib_message_id")
+        modify = False
 
     elif arg == None:
         await ensure_display(up,ctx,return_name = "_okib_message_id")
-    modify = False
-    for user in ctx.message.mentions:
-        if user not in _okib_members:
-            _okib_members.append(user)
-            modify = True
-        if user in _noib_members:
-            _noib_members.remove(user)
-            modify = True
             
     if arg == 'retrieve':
         await list_update()
@@ -627,11 +678,12 @@ async def okib(ctx, arg=None):
             await ensure_display(functools.partial(combinator3000,ctx.message.delete,functools.partial((await _okib_channel.fetch_message(_okib_message_id)).edit,content=_list_content),gather))
             _gathered = True
         else:
-            await ensure_display(functools.partial(combinator3000,ctx.message.delete,functools.partial((await _okib_channel.fetch_message(_okib_message_id)).edit, content=_list_content)))
+            await ensure_display(functools.partial(combinator3000,ctx.message.delete,check_almost_gather,functools.partial((await _okib_channel.fetch_message(_okib_message_id)).edit, content=_list_content)))
 
 @_client.command()
 async def noib(ctx):
     global _okib_members
+    global _laterib_members
     global _noib_members
     global _okib_channel
     global _okib_message_id
@@ -661,12 +713,17 @@ async def noib(ctx):
         if user in _okib_members:
             _okib_members.remove(user)
             modify = True
+        if user in _laterib_members:
+            _laterib_members.remove(user)
+            
     if modify:
         await list_update()
+        gather_check()
         await ensure_display(functools.partial(combinator3000,ctx.message.delete,functools.partial((await _okib_channel.fetch_message(_okib_message_id)).edit, content=_list_content)))
         
 async def okib_on_reaction_add(reaction, user):
     global _okib_members
+    global _laterib_members
     global _noib_members
     global _gathered
     
@@ -681,6 +738,8 @@ async def okib_on_reaction_add(reaction, user):
                     if user in _noib_members:
                         _noib_members.remove(user)
                         modify = True
+                    if user in _laterib_members:
+                        _laterib_members.remove(user)
 
                 elif reaction.emoji == _noib_emote:
                     if user not in _noib_members:
@@ -689,7 +748,19 @@ async def okib_on_reaction_add(reaction, user):
                     if user in _okib_members:
                         _okib_members.remove(user)
                         modify = True
-
+                    if user in _laterib_members:
+                        _laterib_members.remove(user)
+                
+                elif reaction.emoji == _laterib_emote:
+                    if user not in _laterib_members:
+                        _laterib_members.append(user)
+                    if user in _noib_members:
+                        _noib_members.remove(user)
+                        modify = True
+                    if user in _okib_members:
+                        _okib_members.remove(user)
+                        modify = True
+                
             except AttributeError:
                 pass
                 
@@ -700,7 +771,7 @@ async def okib_on_reaction_add(reaction, user):
                     await ensure_display(functools.partial(combinator3000,gather,functools.partial((await _okib_channel.fetch_message(_okib_message_id)).edit,content=_list_content),functools.partial(reaction.remove,user)))
                     _gathered = True
                 else:
-                    await ensure_display(functools.partial(combinator3000,functools.partial((await _okib_channel.fetch_message(_okib_message_id)).edit,content=_list_content),functools.partial(reaction.remove,user)))
+                    await ensure_display(functools.partial(combinator3000,functools.partial((await _okib_channel.fetch_message(_okib_message_id)).edit,content=_list_content),functools.partial(reaction.remove,user),check_almost_gather))
                 return
         #justremove   
         await ensure_display(functools.partial(reaction.remove,user))
@@ -791,21 +862,106 @@ async def pedigree(ctx):
 # ==== MISC ========================================================================================
 
 async def check_replay(message):
-    att = message.attachments
-    if len(att) > 0 :
-        if ".w3g" in att[0].filename:
-            replay = await att[0].read()
-            code = await post_replay(replay)
-            await ensure_display(message.channel.send, "Replay `"+ att[0].filename +"` sent : " + str(code))
+    ENSURE_DISPLAY_WINDOW = 30
 
-async def post_replay(replay):
-    #replay = open("replay.w3g", "rb")
-    file_dic = {
-        "file": replay,
-    }
-    r = requests.post("https://api.wc3stats.com/upload", files=file_dic)
-    print(r.content)
-    return r.status_code
+    if len(message.attachments) == 0:
+        return
+
+    att = message.attachments[0]
+    if ".w3g" not in att.filename:
+        return
+
+    replay = await att.read()
+    timeout = aiohttp.ClientTimeout(total=ENSURE_DISPLAY_WINDOW)
+    async with aiohttp.ClientSession(timeout=timeout) as session:
+        logging.info("Uploading replay {}".format(att.filename))
+        response = await session.post("https://api.wc3stats.com/upload", data={
+            "file": replay
+        })
+        if response.status != 200:
+            logging.error("Replay upload failed")
+            logging.error(await response.text())
+            await ensure_display(message.channel.send, "Failed to upload replay `{}` with status `{}`".format(att.filename, response.status), window=ENSURE_DISPLAY_WINDOW)
+            return
+
+        response_json = await response.json()
+        replay_id = response_json["body"]["id"]
+        fallback_message = "Uploaded replay `{}` => https://wc3stats.com/games/{}".format(att.filename, replay_id)
+        try:
+            replay_data = ReplayData(response_json)
+        except Exception as e:
+            logging.error("Failed to parse replay data, id {}".format(replay_id))
+            traceback.print_exc()
+            await ensure_display(message.channel.send, fallback_message, window=ENSURE_DISPLAY_WINDOW)
+            return
+
+        content = "Uploaded replay `{}`:".format(att.filename)
+        embed = replay_data.to_discord_embed()
+        await ensure_display(message.channel.send, content=content, embed=embed, window=ENSURE_DISPLAY_WINDOW)
+
+@_client.command()
+async def unsub(ctx, arg1=None):
+    await ensure_display(functools.partial(unsub2, ctx, arg1))
+    
+async def unsub2(ctx,arg1):
+    if (arg1 == "EU" or arg1 == "eu"):
+        await ctx.message.author.remove_roles(_EU_role)
+        await ctx.message.channel.send("EU has been succesfully removed from your roles")
+    if (arg1 == "NA" or arg1 == "na"):
+        await ctx.message.author.remove_roles(_NA_role)
+        await ctx.message.channel.send("NA has been succesfully removed from your roles")
+    if (arg1 == "KR" or arg1 == "kr"):
+        await ctx.message.author.remove_roles(_KR_role)
+        await ctx.message.channel.send("KR has been succesfully removed from your roles")
+
+@_client.command()
+async def sub(ctx, arg1=None):
+    await ensure_display(functools.partial(sub2, ctx, arg1))
+    
+async def sub2(ctx, arg1):
+    if (arg1 == "EU" or arg1 == "eu"):
+        await ctx.message.author.add_roles(_EU_role)
+        await ctx.message.channel.send("EU has been succesfully added in your roles")
+    if (arg1 == "NA" or arg1 == "na"):
+        await ctx.message.author.add_roles(_NA_role)
+        await ctx.message.channel.send("NA has been succesfully added in your roles")
+    if (arg1 == "KR" or arg1 == "kr"):
+        await ctx.message.author.add_roles(_KR_role)
+        await ctx.message.channel.send("KR has been succesfully added in your roles")
+
+
+# @_client.command()
+# async def register(ctx,arg1):
+#     if ctx.message.author.roles[-1] < _guild.get_role(params.GRUNT_ID):
+#         await ensure_display(ctx.channel.send, NO_POWER_MSG)
+#         return
+#     
+#     conn = sqlite3.connect(DB_FILE_PATH)
+#     cursor = conn.cursor()
+# 
+#     #check if name is already registered
+#     sqlquery = "SELECT * FROM Players WHERE ent_name = " + name
+#     cursor.execute(sqlquery)
+#     row = cursor.fetchone()
+#     if row is not None:
+#         conn.close()
+#         await ensure_display(ctx.channel.send, "That ENT name has already been registered, no modification were made")
+#         return
+#     
+#     #check if that player has already registered an ENT name, if so => modify the entry
+#     sqlquery = "SELECT RowID FROM Players WHERE Player_id = " + ctx.message.author.id
+#     cursor.execute(sqlquery)
+#     row = cursor.fetchone()
+#     if row is not None:
+#         #delete the value first
+#         RowID = row[0]
+#         sqlquery = "DELETE FROM Players WHERE RowID = " + str(RowID)
+#         cursor.execute(sqlquery)
+#         conn.commit()
+#     sqlquery = "INSERT INTO Players (Player_id,ent_name) VALUES (" + str(ctx.message.author.id) + "," + name + ")"
+#     cursor.execute(sqlquery)
+#     conn.commit()
+#     conn.close()
 
 
 # ==== LOBBIES =====================================================================================
@@ -813,283 +969,95 @@ async def post_replay(replay):
 LOBBY_REFRESH_RATE = 5
 QUERY_RETRIES_BEFORE_WARNING = 10
 ENSURE_DISPLAY_WINDOW = LOBBY_REFRESH_RATE * 2
-BELL_EMOJI = "🔔"
-NOBELL_EMOJI = "🔕"
 
 _update_lobbies_lock = asyncio.Lock()
 
-class MapVersion:
-    def __init__(self, file_name, ent_only=False, deprecated=False, counterfeit=False, slots=[8,11]):
-        self.file_name = file_name
-        self.ent_only = ent_only
-        self.deprecated = deprecated
-        self.counterfeit = counterfeit
-        self.slots = slots
+def lobby_get_message_id(lobby):
+    key = lobby.get_message_id_key()
+    if key not in globals():
+        return None
+    return globals()[key]
 
-KNOWN_VERSIONS = [
-    # TODO will keep updating until Battle.Net version release
-    MapVersion("Impossible.Bosses.v1.11.3"),
-    MapVersion("Impossible.Bosses.v1.11.3-ent", ent_only=True),
-    MapVersion("Impossible.Bosses.v1.11.2-ent", ent_only=True, deprecated=True),
-    MapVersion("Impossible.Bosses.v1.11.1-ent", ent_only=True, deprecated=True),
-    MapVersion("Impossible.Bosses.v1.11.0-ent", ent_only=True, deprecated=True),
+async def lobby_create_message(lobby):
+    channel = _ent_channel if lobby.is_ent else _bnet_channel
 
-    MapVersion("Impossible.Bosses.v1.10.5", deprecated=True),
-    MapVersion("Impossible.Bosses.v1.10.5-ent", ent_only=True, deprecated=True),
-    MapVersion("Impossible.Bosses.v1.10.4-ent", ent_only=True, deprecated=True),
-    MapVersion("Impossible.Bosses.v1.10.3-ent", ent_only=True, deprecated=True),
-    MapVersion("Impossible.Bosses.v1.10.2-ent", ent_only=True, deprecated=True),
-    MapVersion("Impossible.Bosses.v1.10.1-ent", ent_only=True, deprecated=True),
+    try:
+        message_info = lobby.to_discord_message_info()
+        if message_info is None:
+            logging.info("Lobby skipped: {}".format(lobby))
+            return
 
-    MapVersion("Impossible_BossesReforgedV1.09Test", deprecated=True),
-    MapVersion("ImpossibleBossesEnt1.09", ent_only=True, deprecated=True),
-    MapVersion("Impossible_BossesReforgedV1.09_UFWContinues", counterfeit=True),
-    MapVersion("Impossible_BossesReforgedV1.09UFW30", counterfeit=True),
-    MapVersion("Impossible_BossesReforgedV1.08Test", deprecated=True),
-    MapVersion("Impossible_BossesReforgedV1.07Test", deprecated=True),
-    MapVersion("Impossible_BossesTestversion1.06", deprecated=True),
-    MapVersion("Impossible_BossesReforgedV1.05", deprecated=True),
-    MapVersion("Impossible_BossesReforgedV1.02", deprecated=True),
-
-    MapVersion("Impossible Bosses BetaV3V", deprecated=True),
-    MapVersion("Impossible Bosses BetaV3R", deprecated=True),
-    MapVersion("Impossible Bosses BetaV3P", deprecated=True),
-    MapVersion("Impossible Bosses BetaV3E", deprecated=True),
-    MapVersion("Impossible Bosses BetaV3C", deprecated=True),
-    MapVersion("Impossible Bosses BetaV3A", deprecated=True),
-    MapVersion("Impossible Bosses BetaV2X", deprecated=True),
-    MapVersion("Impossible Bosses BetaV2W", deprecated=True),
-    MapVersion("Impossible Bosses BetaV2S", deprecated=True),
-    MapVersion("Impossible Bosses BetaV2J", deprecated=True),
-    MapVersion("Impossible Bosses BetaV2F", deprecated=True),
-    MapVersion("Impossible Bosses BetaV2E", deprecated=True),
-    MapVersion("Impossible Bosses BetaV2D", deprecated=True),
-    MapVersion("Impossible Bosses BetaV2C", deprecated=True),
-    MapVersion("Impossible Bosses BetaV2A", deprecated=True),
-    MapVersion("Impossible Bosses BetaV1Y", deprecated=True),
-    MapVersion("Impossible Bosses BetaV1X", deprecated=True),
-    MapVersion("Impossible Bosses BetaV1W", deprecated=True),
-    MapVersion("Impossible Bosses BetaV1V", deprecated=True),
-    MapVersion("Impossible Bosses BetaV1R", deprecated=True),
-    MapVersion("Impossible Bosses BetaV1P", deprecated=True),
-    MapVersion("Impossible Bosses BetaV1C", deprecated=True),
-]
-
-def get_map_version(map_file):
-    for version in KNOWN_VERSIONS:
-        if map_file == version.file_name:
-            return version
-    return None
-
-def get_map_server_nice(server):
-    if server == "usw":
-        return ":flag_us: US"
-    elif server == "eu":
-        return ":flag_eu: EU"
-    elif server == "kr":
-        return ":flag_kr: KR"
-    elif server == "Montreal":
-        return ":flag_ca: Montreal (ENT)"
-    elif server == "New York":
-        return ":flag_us: New York (ENT)"
-    elif server == "France":
-        return ":flag_fr: France (ENT)"
-    elif server == "Amsterdam":
-        return ":flag_nl: Amsterdam (ENT)"
-    return server
-
-class Lobby:
-    def __init__(self, lobby_dict, is_ent):
-        self.is_ent = is_ent
-        self.id = lobby_dict["id"]
-        self.name = lobby_dict["name"]
-        self.map = lobby_dict["map"]
-        self.host = lobby_dict["host"]
-        self.subscribers = []
-
-        if is_ent:
-            self.server = lobby_dict["location"]
-            self.slots_taken = lobby_dict["slots_taken"]
-            self.slots_total = lobby_dict["slots_total"]
-        else:
-            if self.map[-4:] == ".w3x":
-                self.map = self.map[:-4]
-            self.server = lobby_dict["server"]
-            self.slots_taken = lobby_dict["slotsTaken"]
-            self.slots_total = lobby_dict["slotsTotal"]
-
-    def __eq__(self, other):
-        return self.id == other.id
-
-    def __hash__(self):
-        return self.id
-
-    def __str__(self):
-        return "[id={} ent={} name=\"{}\" server={} map=\"{}\" host={} slots={}/{} message_id={}]".format(
-            self.id, self.is_ent, self.name, self.server, self.map, self.host, self.slots_taken, self.slots_total, self.get_message_id()
+        logging.info("Creating lobby: {}".format(lobby))
+        key = lobby.get_message_id_key()
+        await ensure_display(send_message_with_bell_reactions,
+            channel, content=message_info["message"], embed=message_info["embed"],
+            window=ENSURE_DISPLAY_WINDOW, return_name=key
         )
+    except Exception as e:
+        logging.error("Failed to send message for lobby \"{}\", {}".format(lobby, e))
+        traceback.print_exc()
 
-    def is_ib(self):
-        #return self.map.find("Legion") != -1 and self.map.find("TD") != -1 # test
-        #return self.map.find("Uther Party") != -1 # test
-        return self.map.find("Impossible") != -1 and self.map.find("Bosses") != -1
+async def lobby_update_message(lobby, is_open=True):
+    channel = _ent_channel if lobby.is_ent else _bnet_channel
 
-    def get_message_id_key(self):
-        return "lobbymsg{}".format(self.id)
-
-    def get_message_id(self):
-        key = self.get_message_id_key()
-        if key not in globals():
-            return None
-        return globals()[key]
-
-    def is_updated(self, new):
-        return self.name != new.name or self.server != new.server or self.map != new.map or self.host != new.host or self.slots_taken != new.slots_taken or self.slots_total != new.slots_total
-
-    def to_discord_message_info(self, open=True):
-        COLOR_CLOSED = discord.Colour(0x8a0808)
-
-        version = get_map_version(self.map)
-        mark = ""
-        message = ""
-        if version is None:
-            mark = ":question:"
-            message = ":warning: *WARNING: Unknown map version* :warning:"
-        elif version.counterfeit:
-            mark = ":x:"
-            message = ":warning: *WARNING: Counterfeit version* :warning:"
-        elif not self.is_ent and version.ent_only:
-            mark = ":x:"
-            message = ":warning: *WARNING: Incompatible version* :warning:"
-        elif version.deprecated:
-            mark = ":x:"
-            message = ":warning: *WARNING: Old map version* :warning:"
-
-        slots_taken = self.slots_taken
-        slots_total = self.slots_total
-
-        if version is not None:
-            if not self.is_ent:
-                # Not sure why, but IB bnet lobbies have 1 extra slot
-                slots_taken -= 1
-                slots_total -= 1
-
-            if slots_total not in version.slots:
-                logging.error("Invalid total slots {}, expected {}, for map file {}".format(self.slots_total, version.slots, self.map))
-                return None
-
-        title_format = "{} ({}/{})"
-        description_format = "{} {}"
-        if not open:
-            title_format = "~~{}~~ ({}/{})"
-            description_format = "~~{}~~ {}"
-
-        title = title_format.format(self.name, slots_taken, slots_total)
-        description = description_format.format(self.map, mark)
-        host = self.host if len(self.host) > 0 else "---"
-        server = get_map_server_nice(self.server)
-
-        embed = discord.Embed(title=title, description=description)
-        embed.add_field(name="Host", value=host, inline=True)
-        embed.add_field(name="Server", value=server, inline=True)
-        if len(self.subscribers) > 0:
-            subscribers_string = BELL_EMOJI + " "
-            for i in range(0, len(self.subscribers), 4):
-                if i != 0:
-                    subscribers_string += "\n"
-                subscribers_string += ", ".join([
-                    sub.display_name for sub in self.subscribers[i:i+4]
-                ])
-            embed.set_footer(text=subscribers_string)
-
-        if not open:
-            embed.color = COLOR_CLOSED
-
-        return {
-            "message": message,
-            "embed": embed,
-        }
-
-    async def create_message(self):
-        channel = _ent_channel if self.is_ent else _bnet_channel
-
+    message_id = lobby_get_message_id(lobby)
+    if message_id is not None:
+        message = None
         try:
-            message_info = self.to_discord_message_info()
-            if message_info is None:
-                logging.info("Lobby skipped: {}".format(self))
-                return
-
-            logging.info("Creating lobby: {}".format(self))
-            key = self.get_message_id_key()
-            await ensure_display(send_message_with_bell_reactions,
-                channel, content=message_info["message"], embed=message_info["embed"],
-                window=ENSURE_DISPLAY_WINDOW, return_name=key
-            )
+            message = await channel.fetch_message(message_id)
         except Exception as e:
-            logging.error("Failed to send message for lobby \"{}\", {}".format(self, e))
+            logging.error("Error fetching message with ID {}, {}".format(message_id, e))
             traceback.print_exc()
 
-    async def update_message(self, is_open=True):
-        channel = _ent_channel if self.is_ent else _bnet_channel
-
-        message_id = self.get_message_id()
-        if message_id is not None:
-            message = None
+        if message is not None:
             try:
-                message = await channel.fetch_message(message_id)
-            except Exception as e:
-                logging.error("Error fetching message with ID {}, {}".format(message_id, e))
-                traceback.print_exc()
-
-            if message is not None:
-                try:
-                    message_info = self.to_discord_message_info(is_open)
-                    if message_info is None:
-                        logging.info("Lobby skipped: {}".format(self))
-                        return
-                except Exception as e:
-                    logging.error("Failed to get lobby as message info for \"{}\", {}".format(
-                        self.name, e
-                    ))
-                    traceback.print_exc()
+                message_info = lobby.to_discord_message_info(is_open)
+                if message_info is None:
+                    logging.info("Lobby skipped: {}".format(lobby))
                     return
-
-                logging.info("Updating lobby (open={}): {}".format(is_open, self))
-                await ensure_display(message.edit, content=message_info["message"], embed=message_info["embed"], window=ENSURE_DISPLAY_WINDOW)
-        else:
-            logging.error("Missing message ID on update for lobby {}".format(self))
-
-        if not is_open:
-            if len(self.subscribers) > 0:
-                logging.info("Lobby closed, notifying {} subscribers".format(len(self.subscribers)))
-                subscribers_string = "Lobby started/unhosted: **{}**\n".format(self.name)
-                subscribers_string += ", ".join([sub.mention for sub in self.subscribers])
-                await ensure_display(channel.send, subscribers_string)
-
-            key = self.get_message_id_key()
-            if key in globals():
-                del globals()[key]
-
-    async def delete_message(self):
-        channel = _ent_channel if self.is_ent else _bnet_channel
-
-        message_id = self.get_message_id()
-        if message_id is not None:
-            message = None
-            try:
-                message = await channel.fetch_message(message_id)
             except Exception as e:
-                logging.error("Error fetching message with ID {}, {}".format(message_id, e))
+                logging.error("Failed to get lobby as message info for \"{}\", {}".format(
+                    lobby.name, e
+                ))
                 traceback.print_exc()
+                return
 
-            if message is not None:
-                await ensure_display(message.delete, window=ENSURE_DISPLAY_WINDOW)
-        else:
-            logging.error("Missing message ID on delete for lobby {}".format(self))
+            logging.info("Updating lobby (open={}): {}".format(is_open, lobby))
+            await ensure_display(message.edit, content=message_info["message"], embed=message_info["embed"], window=ENSURE_DISPLAY_WINDOW)
+    else:
+        logging.error("Missing message ID on update for lobby {}".format(lobby))
 
-        key = self.get_message_id_key()
+    if not is_open:
+        if len(lobby.subscribers) > 0:
+            logging.info("Lobby closed, notifying {} subscribers".format(len(lobby.subscribers)))
+            subscribers_string = "Lobby started/unhosted: **{}**\n".format(lobby.name)
+            subscribers_string += ", ".join([sub.mention for sub in lobby.subscribers])
+            await ensure_display(channel.send, subscribers_string)
+
+        key = lobby.get_message_id_key()
         if key in globals():
             del globals()[key]
+
+async def lobby_delete_message(lobby):
+    channel = _ent_channel if lobby.is_ent else _bnet_channel
+
+    message_id = lobby_get_message_id(lobby)
+    if message_id is not None:
+        message = None
+        try:
+            message = await channel.fetch_message(message_id)
+        except Exception as e:
+            logging.error("Error fetching message with ID {}, {}".format(message_id, e))
+            traceback.print_exc()
+
+        if message is not None:
+            await ensure_display(message.delete, window=ENSURE_DISPLAY_WINDOW)
+    else:
+        logging.error("Missing message ID on delete for lobby {}".format(lobby))
+
+    key = lobby.get_message_id_key()
+    if key in globals():
+        del globals()[key]
 
 def get_lobby_changes(prev_lobbies, api_lobbies):
     lobbies = []
@@ -1119,15 +1087,15 @@ async def report_lobbies(prev_lobbies, api_lobbies):
     # Update messages for closed lobbies
     for i in range(len(prev_lobbies)):
         if changes[1][i]:
-            await prev_lobbies[i].update_message(is_open=False)
+            await lobby_update_message(prev_lobbies[i], is_open=False)
 
     # Create/update messages for open lobbies
     for i in range(len(lobbies)):
         assert not (changes[2][i] and changes[3][i])
         if changes[2][i]:
-            await lobbies[i].create_message()
+            await lobby_create_message(lobbies[i])
         if changes[3][i]:
-            await lobbies[i].update_message()
+            await lobby_update_message(lobbies[i])
 
     return lobbies
 
@@ -1142,7 +1110,7 @@ async def update_bnet_lobbies(session, prev_lobbies):
 
     lobbies = [Lobby(obj, is_ent=False) for obj in body]
     ib_lobbies = [lobby for lobby in lobbies if lobby.is_ib()]
-    logging.info("wc3stats: {}/{} IB lobbies".format(len(ib_lobbies), len(lobbies)))
+    logging.debug("wc3stats: {}/{} IB lobbies".format(len(ib_lobbies), len(lobbies)))
     return await report_lobbies(prev_lobbies, ib_lobbies)
 
 async def update_ent_lobbies(session, prev_lobbies):
@@ -1153,7 +1121,7 @@ async def update_ent_lobbies(session, prev_lobbies):
 
     lobbies = [Lobby(obj, is_ent=True) for obj in response_json]
     ib_lobbies = [lobby for lobby in lobbies if lobby.is_ib()]
-    logging.info("ENT: {}/{} IB lobbies".format(len(ib_lobbies), len(lobbies)))
+    logging.debug("ENT: {}/{} IB lobbies".format(len(ib_lobbies), len(lobbies)))
     return await report_lobbies(prev_lobbies, ib_lobbies)
 
 async def update_ib_lobbies():
@@ -1205,37 +1173,33 @@ async def update_ib_lobbies():
 
     _open_lobbies = new_bnet_lobbies + new_ent_lobbies
 
-# TODO temporary, to support "!getgames"
-async def do_getgames(channel, getgames_message):
+@_client.command()
+async def getgames(ctx):
     global _open_lobbies
 
-    if channel == _ent_channel:
+    if ctx.channel == _ent_channel:
         is_ent_channel = True
-    elif channel == _bnet_channel:
+    elif ctx.channel == _bnet_channel:
         is_ent_channel = False
     else:
         return
-    await ensure_display(getgames_message.delete)
+    await ensure_display(ctx.message.delete)
 
     async with _update_lobbies_lock:
         # Clear all posted messages for open lobbies and trigger a refresh
         for lobby in _open_lobbies:
             if lobby.is_ent == is_ent_channel:
-                await lobby.delete_message()
+                await lobby_delete_message(lobby)
 
         _open_lobbies = [lobby for lobby in _open_lobbies if lobby.is_ent != is_ent_channel]
         await update_ib_lobbies()
-
-@_client.command()
-async def getgames(ctx):
-    await do_getgames(ctx.channel, ctx.message)
 
 @loop(seconds=LOBBY_REFRESH_RATE)
 async def refresh_ib_lobbies():
     if not _initialized:
         return
 
-    logging.info("Refreshing lobby list")
+    logging.debug("Refreshing lobby list")
     async with _update_lobbies_lock:
         await update_ib_lobbies()
 
@@ -1246,7 +1210,7 @@ async def lobbies_on_reaction_add(reaction, user):
     match_lobby = False
     async with _update_lobbies_lock:
         for lobby in _open_lobbies:
-            message_id = lobby.get_message_id()
+            message_id = lobby_get_message_id(lobby)
             if reaction.message.id == message_id:
                 match_lobby = True
                 updated = False
@@ -1260,7 +1224,7 @@ async def lobbies_on_reaction_add(reaction, user):
                     updated = True
 
                 if updated:
-                    await lobby.update_message()
+                    await lobby_update_message(lobby)
 
     if match_lobby:
         await ensure_display(reaction.remove, user)
