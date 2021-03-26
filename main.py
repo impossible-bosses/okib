@@ -196,17 +196,21 @@ def update_workspace(workspace_bytes):
         globals()[key] = value
 
     # OKIB
-    _okib_channel = _client.get_channel(workspace_obj["okib_channel_id"])
+    channel_id = workspace_obj["okib_channel_id"]
+    _okib_channel = _client.get_channel(channel_id)
     if _okib_channel == None:
-        pass # TODO oops!
+        # TODO oops!
+        logging.error("Failed to get OKIB channel from id {}".format(channel_id))
     _okib_message_id = workspace_obj["okib_message_id"]
     _list_content = workspace_obj["list_content"]
     _okib_members = workspace_obj["okib_members"]
     _laterib_members = workspace_obj["laterib_members"]
     _noib_members = workspace_obj["noib_members"]
-    _gatherer = _guild.get_member(workspace_obj["gatherer_id"])
+    gatherer_id = workspace_obj["gatherer_id"]
+    _gatherer = _guild.get_member(gatherer_id)
     if _gatherer == None:
-        pass # TODO oops!
+        # TODO oops!
+        logging.error("Failed to get member from id {}".format(gatherer_id))
     _gathered = workspace_obj["gathered"]
     _gather_time = workspace_obj["gather_time"]
 
