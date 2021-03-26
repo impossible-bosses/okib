@@ -163,10 +163,9 @@ class ReplayData:
         self.players = []
         for p in game["players"]:
             try:
-                player_data = PlayerData(p)
+                self.players.append(PlayerData(p))
             except ValueError:
                 continue
-            self.players.append(player_data)
         self.boss_kills = None
         if not self.win:
             self.boss_kills = max([p.boss_kills for p in self.players])
