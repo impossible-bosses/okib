@@ -223,6 +223,12 @@ def update_workspace(workspace_bytes):
     _gather_time = workspace_obj["gather_time"]
     logging.info("Updated workspace")
 
+    logging.info(_okib_channel)
+    logging.info(_gatherer)
+    logging.info(_okib_members)
+    logging.info(_laterib_members)
+    logging.info(_noib_members)
+
 async def send_workspace(to_id):
     lobby_message_ids = {}
     for key, value in globals().items():
