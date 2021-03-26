@@ -177,13 +177,34 @@ async def send_db(to_id):
 
 def update_workspace(workspace_bytes):
     global _open_lobbies
+    global _okib_channel
+    global _okib_message_id
+    global _list_content
+    global _okib_members
+    global _laterib_members
+    global _noib_members
+    global _gatherer
+    global _gathered
+    global _gather_time
 
     workspace_obj = pickle.loads(workspace_bytes)
     logging.info("Updating workspace: {}".format(workspace_obj))
 
+    # Lobbies
     _open_lobbies = workspace_obj["open_lobbies"]
     for key, value in workspace_obj["lobby_message_ids"].items():
         globals()[key] = value
+
+    # OKIB
+    _okib_channel = workspace_obj["okib_channel"]
+    _okib_message_id = workspace_obj["okib_message_id"]
+    _list_content = workspace_obj["list_content"]
+    _okib_members = workspace_obj["okib_members"]
+    _laterib_members = workspace_obj["laterib_members"]
+    _noib_members = workspace_obj["noib_members"]
+    _gatherer = workspace_obj["gatherer"]
+    _gathered = workspace_obj["gathered"]
+    _gather_time = workspace_obj["gather_time"]
 
 async def send_workspace(to_id):
     lobby_message_ids = {}
@@ -192,8 +213,20 @@ async def send_workspace(to_id):
             lobby_message_ids[key] = value
 
     workspace_obj = {
+        # Lobbies
         "open_lobbies": _open_lobbies,
-        "lobby_message_ids": lobby_message_ids
+        "lobby_message_ids": lobby_message_ids,
+
+        # OKIB
+        "okib_channel": _okib_channel,
+        "okib_message_id": _okib_message_id,
+        "list_content": _list_content,
+        "okib_members": _okib_members,
+        "laterib_members": _laterib_members,
+        "noib_members": _noib_members,
+        "gatherer": _gatherer,
+        "gathered": _gathered,
+        "gather_time": _gather_time
     }
     logging.info("Sending workspace: {}".format(workspace_obj))
 
@@ -526,12 +559,13 @@ NOIB_EMOJI_STRING = "<:noib:{}>".format(NOIB_EMOJI_ID)
 OKIB_GATHER_EMOJI_STRING = "<:ib:{}><:ib2:{}>".format(IB_EMOJI_ID, IB2_EMOJI_ID)
 OKIB_GATHER_PLAYERS = 8 # not pointless - sometimes I use this for testing
 
-_okib_channel =  None
-_okib_message_id = None
-_list_content = ""
 _okib_emote = None
 _laterib_emote = None
 _noib_emote = None
+
+_okib_channel =  None
+_okib_message_id = None
+_list_content = ""
 _okib_members = []
 _laterib_members = []
 _noib_members = []
@@ -541,8 +575,6 @@ _gather_time = datetime.datetime.now()
 
 async def gather():
     gather_list_string = " ".join([member.mention for member in _okib_members])
-    # TODO combine these? can't combine the message sends, but can combine the ensure_display
-    # you doing it wront => the purpose of making a encapsulating function is to actually ensuredisplay the whole thing not everything inside it ^^
     await _okib_channel.send(gather_list_string + " Time to play !")
     await _okib_channel.send(OKIB_EMOJI_STRING)
     for member in _okib_members:
@@ -568,11 +600,10 @@ async def list_update():
         OKIB_EMOJI_STRING, len(_okib_members), OKIB_GATHER_PLAYERS, okib_list_string,
         NOIB_EMOJI_STRING, noib_list_string
     )
-    #await ensure_display((_okib_channel.fetch_message(_okib_message_id)).edit, content=_list_content)
 
 async def check_almost_gather():
     #print(len(_okib_members)+round(0.1+len(_laterib_members)/2))
-    if len(_okib_members)+round(0.1+len(_laterib_members)/2) >= OKIB_GATHER_PLAYERS and not _gathered :
+    if len(_okib_members)+round(0.1+len(_laterib_members)/2) >= OKIB_GATHER_PLAYERS and not _gathered:
         for member in _laterib_members:
             try:
                 await member.send("Hey, you are :laterib: and our radar indicates that the lobby gather is almost completed !! \nThis might be a great time for you to think about :okib: ;)")
@@ -585,7 +616,6 @@ def gather_check():
     global _gathered
     if len(_okib_members) >= OKIB_GATHER_PLAYERS and not _gathered:
         return True
-        #ensure_display(functools.partial(combinator3000,(_okib_channel.fetch_message(_okib_message_id)).edit,gather,content=_list_content))) 
     if len(_okib_members) < OKIB_GATHER_PLAYERS and _gathered:
         _gathered = False
         return False
@@ -593,7 +623,7 @@ def gather_check():
 async def up(ctx):
     global _okib_message_id
     
-    if _okib_message_id is not None :
+    if _okib_message_id is not None:
         await (await _okib_channel.fetch_message(_okib_message_id)).delete()
 
     okib_message = await ctx.send(_list_content)
@@ -643,7 +673,7 @@ async def okib(ctx, arg=None):
     if _okib_channel is None:
         _gatherer = ctx.message.author
         _gather_time = datetime.datetime.now()
-        #Check for option
+        # Check for option
         if adv and arg == 'retrieve':
             pass
         else:
@@ -674,11 +704,25 @@ async def okib(ctx, arg=None):
     elif modify:
         await list_update()
         if gather_check():
-            #nsure_display(functools.partial(combinator3000,gather,functools.partial((await _okib_channel.fetch_message(_okib_message_id)).edit,content=_list_content),functools.partial(reaction.remove,user)))
-            await ensure_display(functools.partial(combinator3000,ctx.message.delete,functools.partial((await _okib_channel.fetch_message(_okib_message_id)).edit,content=_list_content),gather))
+            await ensure_display(functools.partial(
+                combinator3000,
+                ctx.message.delete,
+                functools.partial(
+                    (await _okib_channel.fetch_message(_okib_message_id)).edit,
+                    content=_list_content),
+                gather
+            ))
             _gathered = True
         else:
-            await ensure_display(functools.partial(combinator3000,ctx.message.delete,check_almost_gather,functools.partial((await _okib_channel.fetch_message(_okib_message_id)).edit, content=_list_content)))
+            await ensure_display(functools.partial(
+                combinator3000,
+                ctx.message.delete,
+                check_almost_gather,
+                functools.partial(
+                    (await _okib_channel.fetch_message(_okib_message_id)).edit,
+                    content=_list_content
+                )
+            ))
 
 @_client.command()
 async def noib(ctx):
@@ -701,7 +745,11 @@ async def noib(ctx):
         
         
         if _okib_message_id is not None:
-            await ensure_display(functools.partial(combinator3000,ctx.message.delete,(await _okib_channel.fetch_message(_okib_message_id)).delete))
+            await ensure_display(functools.partial(
+                combinator3000,
+                ctx.message.delete,
+                (await _okib_channel.fetch_message(_okib_message_id)).delete
+            ))
         _okib_message_id = None
         _okib_channel = None
         
@@ -719,7 +767,13 @@ async def noib(ctx):
     if modify:
         await list_update()
         gather_check()
-        await ensure_display(functools.partial(combinator3000,ctx.message.delete,functools.partial((await _okib_channel.fetch_message(_okib_message_id)).edit, content=_list_content)))
+        await ensure_display(functools.partial(
+            combinator3000,
+            ctx.message.delete,
+            functools.partial(
+                (await _okib_channel.fetch_message(_okib_message_id)).edit,
+                content=_list_content)
+        ))
         
 async def okib_on_reaction_add(reaction, user):
     global _okib_members
@@ -768,13 +822,29 @@ async def okib_on_reaction_add(reaction, user):
                 await list_update()
                 #remove&edit
                 if gather_check():
-                    await ensure_display(functools.partial(combinator3000,gather,functools.partial((await _okib_channel.fetch_message(_okib_message_id)).edit,content=_list_content),functools.partial(reaction.remove,user)))
+                    await ensure_display(functools.partial(
+                        combinator3000,
+                        gather,
+                        functools.partial(
+                            (await _okib_channel.fetch_message(_okib_message_id)).edit,
+                            content=_list_content
+                        ),
+                        functools.partial(reaction.remove,user)
+                    ))
                     _gathered = True
                 else:
-                    await ensure_display(functools.partial(combinator3000,functools.partial((await _okib_channel.fetch_message(_okib_message_id)).edit,content=_list_content),functools.partial(reaction.remove,user),check_almost_gather))
+                    await ensure_display(functools.partial(
+                        combinator3000,
+                        functools.partial(
+                            (await _okib_channel.fetch_message(_okib_message_id)).edit,
+                            content=_list_content
+                        ),
+                        functools.partial(reaction.remove, user),
+                        check_almost_gather
+                    ))
                 return
         #justremove   
-        await ensure_display(functools.partial(reaction.remove,user))
+        await ensure_display(functools.partial(reaction.remove, user))
 
 async def peon_promote(member):
     channel = await member.create_dm()
