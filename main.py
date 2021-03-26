@@ -204,24 +204,15 @@ def update_workspace(workspace_bytes):
             logging.error("Failed to get OKIB channel from id {}".format(channel_id))
     _okib_message_id = workspace_obj["okib_message_id"]
     _list_content = workspace_obj["list_content"]
-    _okib_members = []
-    for mid in workspace_obj["okib_member_ids"]:
-        m = _guild.get_member(mid)
-        if m == None:
-            logging.error("Failed to get OKIB member from id {}".format(mid))
-        _okib_members.push(m)
-    _laterib_members = []
-    for mid in workspace_obj["laterib_member_ids"]:
-        m = _guild.get_member(mid)
-        if m == None:
-            logging.error("Failed to get laterIB member from id {}".format(mid))
-        _laterib_members.push(m)
-    _noib_members = []
-    for mid in workspace_obj["noib_member_ids"]:
-        m = _guild.get_member(mid)
-        if m == None:
-            logging.error("Failed to get NOIB member from id {}".format(mid))
-        _noib_members.push(m)
+    _okib_members = [_guild.get_member(mid) for mid in workspace_obj["okib_member_ids"]]
+    if None in _okib_members:
+        logging.error("Failed to get an OKIB member from ID, {} from {}".format(_okib_members, workspace_obj["okib_member_ids"]))
+    _laterib_members = [_guild.get_member(mid) for mid in workspace_obj["laterib_member_ids"]]
+    if None in _laterib_members:
+        logging.error("Failed to get a laterIB member from ID, {} from {}".format(_laterib_members, workspace_obj["laterib_member_ids"]))
+    _noib_members = [_guild.get_member(mid) for mid in workspace_obj["noib_member_ids"]]
+    if None in _noib_members:
+        logging.error("Failed to get a member from ID, {} from {}".format(_noib_members, workspace_obj["noib_member_ids"]))
     gatherer_id = workspace_obj["gatherer_id"]
     if gatherer_id != None:
         _gatherer = _guild.get_member(gatherer_id)
