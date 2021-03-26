@@ -196,13 +196,17 @@ def update_workspace(workspace_bytes):
         globals()[key] = value
 
     # OKIB
-    _okib_channel = workspace_obj["okib_channel"]
+    _okib_channel = _client.get_channel(workspace_obj["okib_channel_id"])
+    if _okib_channel == None:
+        pass # TODO oops!
     _okib_message_id = workspace_obj["okib_message_id"]
     _list_content = workspace_obj["list_content"]
     _okib_members = workspace_obj["okib_members"]
     _laterib_members = workspace_obj["laterib_members"]
     _noib_members = workspace_obj["noib_members"]
-    _gatherer = workspace_obj["gatherer"]
+    _gatherer = _client.get_member(workspace_obj["gatherer_id"])
+    if _gatherer == None:
+        pass # TODO oops!
     _gathered = workspace_obj["gathered"]
     _gather_time = workspace_obj["gather_time"]
 
@@ -218,13 +222,13 @@ async def send_workspace(to_id):
         "lobby_message_ids": lobby_message_ids,
 
         # OKIB
-        "okib_channel": _okib_channel,
+        "okib_channel_id": _okib_channel.id,
         "okib_message_id": _okib_message_id,
         "list_content": _list_content,
         "okib_members": _okib_members,
         "laterib_members": _laterib_members,
         "noib_members": _noib_members,
-        "gatherer": _gatherer,
+        "gatherer_id": _gatherer.id,
         "gathered": _gathered,
         "gather_time": _gather_time
     }
@@ -596,7 +600,7 @@ async def list_update():
     okib_list_string = ", ".join([member.display_name for member in _okib_members])
     noib_list_string = ", ".join([member.display_name for member in _noib_members])
     _list_content = "{} asks : {}\n{} {}/{} : {}\n{} : {}".format(
-        _gatherer.display_name,OKIB_GATHER_EMOJI_STRING,
+        _gatherer.display_name, OKIB_GATHER_EMOJI_STRING,
         OKIB_EMOJI_STRING, len(_okib_members), OKIB_GATHER_PLAYERS, okib_list_string,
         NOIB_EMOJI_STRING, noib_list_string
     )
@@ -655,7 +659,7 @@ async def okib(ctx, arg=None):
         await ensure_display(ctx.channel.send, NO_POWER_MSG)
         return
     
-    if  _okib_channel is not None and _okib_channel != ctx.channel :
+    if  _okib_channel is not None and _okib_channel != ctx.channel:
         await ensure_display(ctx.channel.send, "gathering is already in progress in channel " + _okib_channel.mention)
         return
     
@@ -690,17 +694,17 @@ async def okib(ctx, arg=None):
 
         _okib_channel = ctx.channel
         await list_update()
-        await ensure_display(up,ctx,return_name = "_okib_message_id")
+        await ensure_display(up, ctx, return_name="_okib_message_id")
         modify = False
 
     elif arg == None:
-        await ensure_display(up,ctx,return_name = "_okib_message_id")
+        await ensure_display(up, ctx, return_name="_okib_message_id")
             
     if arg == 'retrieve':
         await list_update()
         gather_check()
         if _gathered:
-            await ensure_display(up,ctx,2,"_okib_message_id")
+            await ensure_display(up, ctx, 2, return_name="_okib_message_id")
     elif modify:
         await list_update()
         if gather_check():
