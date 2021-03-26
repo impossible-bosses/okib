@@ -204,9 +204,24 @@ def update_workspace(workspace_bytes):
             logging.error("Failed to get OKIB channel from id {}".format(channel_id))
     _okib_message_id = workspace_obj["okib_message_id"]
     _list_content = workspace_obj["list_content"]
-    _okib_members = workspace_obj["okib_members"]
-    _laterib_members = workspace_obj["laterib_members"]
-    _noib_members = workspace_obj["noib_members"]
+    _okib_members = []
+    for mid in workspace_obj["okib_member_ids"]:
+        m = _guild.get_member(mid)
+        if m == None:
+            logging.error("Failed to get OKIB member from id {}".format(mid))
+        _okib_members.push(m)
+    _laterib_members = []
+    for mid in workspace_obj["laterib_member_ids"]:
+        m = _guild.get_member(mid)
+        if m == None:
+            logging.error("Failed to get laterIB member from id {}".format(mid))
+        _laterib_members.push(m)
+    _noib_members = []
+    for mid in workspace_obj["noib_member_ids"]:
+        m = _guild.get_member(mid)
+        if m == None:
+            logging.error("Failed to get NOIB member from id {}".format(mid))
+        _noib_members.push(m)
     gatherer_id = workspace_obj["gatherer_id"]
     if gatherer_id != None:
         _gatherer = _guild.get_member(gatherer_id)
@@ -223,6 +238,7 @@ async def send_workspace(to_id):
         if "lobbymsg" in key:
             lobby_message_ids[key] = value
 
+
     workspace_obj = {
         # Lobbies
         "open_lobbies": _open_lobbies,
@@ -232,9 +248,9 @@ async def send_workspace(to_id):
         "okib_channel_id": None if _okib_channel == None else _okib_channel.id,
         "okib_message_id": _okib_message_id,
         "list_content": _list_content,
-        "okib_members": _okib_members,
-        "laterib_members": _laterib_members,
-        "noib_members": _noib_members,
+        "okib_member_ids": [m.id for m in _okib_members],
+        "laterib_member_ids": [m.id for m in _laterib_members],
+        "noib_member_ids": [m.id for m in _noib_members],
         "gatherer_id": None if _gatherer == None else _gatherer.id,
         "gathered": _gathered,
         "gather_time": _gather_time
