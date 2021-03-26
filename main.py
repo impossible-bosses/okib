@@ -213,6 +213,7 @@ def update_workspace(workspace_bytes):
         logging.error("Failed to get member from id {}".format(gatherer_id))
     _gathered = workspace_obj["gathered"]
     _gather_time = workspace_obj["gather_time"]
+    logging.info("Updated workspace")
 
 async def send_workspace(to_id):
     lobby_message_ids = {}
