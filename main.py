@@ -222,13 +222,13 @@ async def send_workspace(to_id):
         "lobby_message_ids": lobby_message_ids,
 
         # OKIB
-        "okib_channel_id": _okib_channel.id,
+        "okib_channel_id": None if _okib_channel == None else _okib_channel.id,
         "okib_message_id": _okib_message_id,
         "list_content": _list_content,
         "okib_members": _okib_members,
         "laterib_members": _laterib_members,
         "noib_members": _noib_members,
-        "gatherer_id": _gatherer.id,
+        "gatherer_id": None if _gatherer == None else _gatherer.id,
         "gathered": _gathered,
         "gather_time": _gather_time
     }
