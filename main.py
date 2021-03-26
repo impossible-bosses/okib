@@ -204,7 +204,7 @@ def update_workspace(workspace_bytes):
     _okib_members = workspace_obj["okib_members"]
     _laterib_members = workspace_obj["laterib_members"]
     _noib_members = workspace_obj["noib_members"]
-    _gatherer = _client.get_member(workspace_obj["gatherer_id"])
+    _gatherer = _guild.get_member(workspace_obj["gatherer_id"])
     if _gatherer == None:
         pass # TODO oops!
     _gathered = workspace_obj["gathered"]
