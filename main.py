@@ -699,7 +699,7 @@ async def noib(ctx):
     global _okib_message_id
     
     #PUB OKIB
-    if ctx.channel ==  _bnet_channel:
+    if ctx.channel ==  _bnet_channel and ctx.message.author.roles[-1] >= _guild.get_role(PUB_HOST_ROLE_ID):
         pass
     #/PUB OKIB
     elif ctx.message.author.roles[-1] <= _guild.get_role(params.PEON_ID):
