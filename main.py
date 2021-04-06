@@ -793,7 +793,7 @@ async def okib_on_reaction_add(reaction, user):
 
 async def pub_host_promote(member):
     channel = await member.create_dm()
-    await ensure_display(channel.send, "Congratulation on being promoted to pub host !\nYou are now able to start a gather for IB games on the pub-games channel. To do so, use !okib command to start it, and !noib command to end/cancel it. Others have to answer with the :okib: and the :noib: reactions. By declaring you up for a game, you're confirming you can join the game when it starts, within 20 mins. You'll get notified when it reach desired number of players.")
+    await ensure_display(channel.send, "Congratulation on being promoted to pub host !\nYou are now able to start a gather for IB games on the pub-games channel. To do so, use !okib command to start it, and !noib command to end/cancel it. Others have to answer with the :okib: and the :noib: reactions. Now you can get an idea of who in the discord is up to play a game without having to guess which players will come back, and discord members can express their interest in playing without needing to leave a message which may not be seen. By starting a gather, you're confirming you can host the game when it reach 8 players, within 20 mins. You'll get notified when it reaches 8 players.")
 
 async def peon_promote(member):
     channel = await member.create_dm()
