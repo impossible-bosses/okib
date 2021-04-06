@@ -103,7 +103,7 @@ print("Source version {}".format(VERSION))
 # discord connection
 client_intents = discord.Intents().default()
 client_intents.members = True
-_client = discord.ext.commands.Bot(command_prefix="!", intents=client_intents)
+_client = discord.ext.commands.Bot(command_prefix="+", intents=client_intents)
 _client.remove_command("help")
 
 _guild = None
@@ -660,7 +660,7 @@ async def okib(ctx, arg=None):
         await list_update()
         await ensure_display(up,ctx,return_name = "_okib_message_id")
         modify = False
-
+        
     elif arg == None:
         await ensure_display(up,ctx,return_name = "_okib_message_id")
             
@@ -677,9 +677,11 @@ async def okib(ctx, arg=None):
             _gathered = True
         else:
             await ensure_display(functools.partial(combinator3000,ctx.message.delete,check_almost_gather,functools.partial((await _okib_channel.fetch_message(_okib_message_id)).edit, content=_list_content)))
+    print("OKIB DONE")
 
 @_client.command()
 async def noib(ctx):
+    print("NOIB CALL")
     global _okib_members
     global _laterib_members
     global _noib_members
