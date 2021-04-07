@@ -175,7 +175,7 @@ async def send_db(to_id):
     with open(DB_FILE_PATH, "rb") as f:
         await com(to_id, MessageType.SEND_DB, "", discord.File(f))
 
-def update_workspace(workspace_bytes):
+async def update_workspace(workspace_bytes):
     global _open_lobbies
     global _okib_channel
     global _okib_message_id
@@ -225,6 +225,9 @@ def update_workspace(workspace_bytes):
 
     _gathered = workspace_obj["gathered"]
     _gather_time = workspace_obj["gather_time"]
+
+    if _okib_message_id is not None:
+        await _okib_channel.send("!okib")
 
 async def send_workspace(to_id):
     lobby_message_ids = {}
@@ -355,7 +358,7 @@ async def parse_bot_com(from_id, message_type, message, attachment):
         pass
     elif message_type == MessageType.SEND_WORKSPACE:
         workspace_bytes = await attachment.read()
-        update_workspace(workspace_bytes)
+        await update_workspace(workspace_bytes)
         await com(from_id, MessageType.SEND_WORKSPACE_ACK)
         # This is the last step for bot instance connection
         _initialized = True
@@ -669,9 +672,13 @@ async def okib(ctx, arg=None):
     global _gathered
     global _gather_time
 
+    print(okib)
+    print(ctx.channel)
+    print(ctx.message.author)
+
     adv = False
     #PUB OKIB
-    if ctx.channel ==  _bnet_channel :
+    if ctx.channel ==  _bnet_channel:
         if ctx.message.author.roles[-1] < _guild.get_role(params.PUB_HOST_ID):
             await ensure_display(ctx.channel.send, NO_POWER_MSG)
             return
