@@ -176,7 +176,7 @@ async def send_db(to_id):
     with open(DB_FILE_PATH, "rb") as f:
         await com(to_id, MessageType.SEND_DB, "", discord.File(f))
 
-async def update_workspace(workspace_bytes):
+def update_workspace(workspace_bytes):
     global _open_lobbies
     global _okib_channel
     global _okib_message_id
@@ -201,8 +201,8 @@ async def update_workspace(workspace_bytes):
     if channel_id != None:
         _okib_channel = _client.get_channel(channel_id)
         if _okib_channel == None:
-            # TODO oops!
             logging.error("Failed to get OKIB channel from id {}".format(channel_id))
+            return False
 
     _okib_message_id = workspace_obj["okib_message_id"]
     _list_content = workspace_obj["list_content"]
@@ -210,22 +210,26 @@ async def update_workspace(workspace_bytes):
     _okib_members = [_guild.get_member(mid) for mid in workspace_obj["okib_member_ids"]]
     if None in _okib_members:
         logging.error("Failed to get an OKIB member from ID, {} from {}".format(_okib_members, workspace_obj["okib_member_ids"]))
+        return False
     _laterib_members = [_guild.get_member(mid) for mid in workspace_obj["laterib_member_ids"]]
     if None in _laterib_members:
         logging.error("Failed to get a laterIB member from ID, {} from {}".format(_laterib_members, workspace_obj["laterib_member_ids"]))
+        return False
     _noib_members = [_guild.get_member(mid) for mid in workspace_obj["noib_member_ids"]]
     if None in _noib_members:
         logging.error("Failed to get a member from ID, {} from {}".format(_noib_members, workspace_obj["noib_member_ids"]))
+        return False
 
     gatherer_id = workspace_obj["gatherer_id"]
     if gatherer_id != None:
         _gatherer = _guild.get_member(gatherer_id)
         if _gatherer == None:
-            # TODO oops!
             logging.error("Failed to get member from id {}".format(gatherer_id))
+            return False
 
     _gathered = workspace_obj["gathered"]
     _gather_time = workspace_obj["gather_time"]
+    return True
 
 async def send_workspace(to_id):
     lobby_message_ids = {}
@@ -356,7 +360,8 @@ async def parse_bot_com(from_id, message_type, message, attachment):
         pass
     elif message_type == MessageType.SEND_WORKSPACE:
         workspace_bytes = await attachment.read()
-        await update_workspace(workspace_bytes)
+        if not update_workspace(workspace_bytes):
+            pass # TODO eh, whatever...
         await com(from_id, MessageType.SEND_WORKSPACE_ACK)
         # This is the last step for bot instance connection
         _initialized = True
