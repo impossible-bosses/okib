@@ -202,8 +202,10 @@ def update_workspace(workspace_bytes):
         if _okib_channel == None:
             # TODO oops!
             logging.error("Failed to get OKIB channel from id {}".format(channel_id))
+
     _okib_message_id = workspace_obj["okib_message_id"]
     _list_content = workspace_obj["list_content"]
+
     _okib_members = [_guild.get_member(mid) for mid in workspace_obj["okib_member_ids"]]
     if None in _okib_members:
         logging.error("Failed to get an OKIB member from ID, {} from {}".format(_okib_members, workspace_obj["okib_member_ids"]))
@@ -213,21 +215,16 @@ def update_workspace(workspace_bytes):
     _noib_members = [_guild.get_member(mid) for mid in workspace_obj["noib_member_ids"]]
     if None in _noib_members:
         logging.error("Failed to get a member from ID, {} from {}".format(_noib_members, workspace_obj["noib_member_ids"]))
+
     gatherer_id = workspace_obj["gatherer_id"]
     if gatherer_id != None:
         _gatherer = _guild.get_member(gatherer_id)
         if _gatherer == None:
             # TODO oops!
             logging.error("Failed to get member from id {}".format(gatherer_id))
+
     _gathered = workspace_obj["gathered"]
     _gather_time = workspace_obj["gather_time"]
-    logging.info("Updated workspace")
-
-    logging.info(_okib_channel)
-    logging.info(_gatherer)
-    logging.info(_okib_members)
-    logging.info(_laterib_members)
-    logging.info(_noib_members)
 
 async def send_workspace(to_id):
     lobby_message_ids = {}
@@ -448,9 +445,7 @@ async def ensure_display(func, *args, window=2, return_name=None, **kwargs):
         # Only create a backup callback if no ENSURE_DISPLAY messages have been seen for the given
         # timeout window. If a return_name is given, we require previous messages to have
         # that return name as well.
-        print("ensure_display waiting on master")
         if not _message_hub.got_message(MessageType.ENSURE_DISPLAY, window, return_name):
-            print("ensure_display writing timed callback")
             _callbacks.append(TimedCallback(window, ensure_display_backup, func, *args, window=window, return_name=return_name, **kwargs))
 
 @_client.command()
@@ -858,7 +853,6 @@ async def okib_on_reaction_add(reaction, user):
                 traceback.print_exc()
                 pass
             
-            print("modify: {}".format(modify))
             if modify:
                 await list_update()
                 #remove&edit
@@ -1352,9 +1346,6 @@ async def lobbies_on_reaction_add(reaction, user):
 
 @_client.event
 async def on_reaction_add(reaction, user):
-    print("on_reaction_add")
-    print(reaction)
-    print(user)
     await asyncio.gather(
         okib_on_reaction_add(reaction, user),
         lobbies_on_reaction_add(reaction, user),
