@@ -493,6 +493,9 @@ async def on_ready():
     global _EU_role
     global _NA_role
     global _KR_role
+
+    BNET_CHANNEL_NAME = "pub-games"
+    ENT_CHANNEL_NAME = "general-chat"
     
     guild_ib = None
     guild_com = None
@@ -510,14 +513,14 @@ async def on_ready():
     channel_bnet = None
     channel_ent = None
     for channel in guild_ib.text_channels:
-        if channel.name == params.BNET_CHANNEL_NAME:
+        if channel.name == BNET_CHANNEL_NAME:
             channel_bnet = channel
-        if channel.name == params.ENT_CHANNEL_NAME:
+        if channel.name == ENT_CHANNEL_NAME:
             channel_ent = channel
     if channel_bnet is None:
-        raise Exception("Pub channel not found: \"{}\" in guild \"{}\"".format(params.BNET_CHANNEL_NAME, guild_ib.name))
+        raise Exception("Pub channel not found: \"{}\" in guild \"{}\"".format(BNET_CHANNEL_NAME, guild_ib.name))
     if channel_ent is None:
-        raise Exception("ENT channel not found: \"{}\" in guild \"{}\"".format(params.ENT_CHANNEL_NAME, guild_ib.name))
+        raise Exception("ENT channel not found: \"{}\" in guild \"{}\"".format(ENT_CHANNEL_NAME, guild_ib.name))
 
     channel_com = None
     for channel in guild_com.text_channels:
@@ -582,10 +585,6 @@ OKIB_EMOJI_STRING = "<:okib:{}>".format(OKIB_EMOJI_ID)
 NOIB_EMOJI_STRING = "<:noib:{}>".format(NOIB_EMOJI_ID)
 OKIB_GATHER_EMOJI_STRING = "<:ib:{}><:ib2:{}>".format(IB_EMOJI_ID, IB2_EMOJI_ID)
 OKIB_GATHER_PLAYERS = 8 # not pointless - sometimes I use this for testing
-
-PUB_HOST_ROLE_ID = 791279611311947796
-PUB_GAMES_CHANNEL_ID = 659868050933415979
-INHOUSE_HIGH_DIFF_ID = 773295175463469087
 
 _okib_emote = None
 _laterib_emote = None
@@ -676,7 +675,7 @@ async def okib(ctx, arg=None):
     adv = False
     #PUB OKIB
     if ctx.channel ==  _bnet_channel :
-        if ctx.message.author.roles[-1] < _guild.get_role(PUB_HOST_ROLE_ID):
+        if ctx.message.author.roles[-1] < _guild.get_role(params.PUB_HOST_ID):
             await ensure_display(ctx.channel.send, NO_POWER_MSG)
             return
     #/PUB OKIB
@@ -767,7 +766,7 @@ async def noib(ctx):
     global _okib_message_id
     
     #PUB OKIB
-    if ctx.channel ==  _bnet_channel and ctx.message.author.roles[-1] >= _guild.get_role(PUB_HOST_ROLE_ID):
+    if ctx.channel ==  _bnet_channel and ctx.message.author.roles[-1] >= _guild.get_role(params.PUB_HOST_ID):
         pass
     #/PUB OKIB
     elif ctx.message.author.roles[-1] <= _guild.get_role(params.PEON_ID):
@@ -905,7 +904,7 @@ async def shaman_promote(member):
 async def on_member_update(before, after):
     if before.guild == _guild:
         #promoted
-        if before.roles[-1] < _guild.get_role(PUB_HOST_ROLE_ID) and after.roles[-1] == _guild.get_role(PUB_HOST_ROLE_ID):
+        if before.roles[-1] < _guild.get_role(params.PUB_HOST_ID) and after.roles[-1] == _guild.get_role(params.PUB_HOST_ID):
             await pub_host_promote(after)
             
         if before.roles[-1] < _guild.get_role(params.SHAMAN_ID) and before.roles[-1] > _guild.get_role(params.PEON_ID):
