@@ -106,6 +106,7 @@ print("Source version {}".format(VERSION))
 # discord connection
 client_intents = discord.Intents().default()
 client_intents.members = True
+client_intents.reactions = True
 _client = discord.ext.commands.Bot(command_prefix="!", intents=client_intents)
 _client.remove_command("help")
 
@@ -225,9 +226,6 @@ async def update_workspace(workspace_bytes):
 
     _gathered = workspace_obj["gathered"]
     _gather_time = workspace_obj["gather_time"]
-
-    if _okib_message_id is not None:
-        await _okib_channel.send("!okib")
 
 async def send_workspace(to_id):
     lobby_message_ids = {}
@@ -573,6 +571,12 @@ async def on_message(message):
         await check_replay(message)
         await _client.process_commands(message)
 
+async def remove_reaction(channel_id, message_id, emoji, member):
+    channel = _client.get_channel(channel_id)
+    message = await channel.fetch_message(message_id)
+    await message.remove_reaction(emoji, member)
+
+
 # ==== OKIB ========================================================================================
 
 NO_POWER_MSG = "You do not have enough power to perform such an action."
@@ -671,10 +675,6 @@ async def okib(ctx, arg=None):
     global _gatherer
     global _gathered
     global _gather_time
-
-    print(okib)
-    print(ctx.channel)
-    print(ctx.message.author)
 
     adv = False
     #PUB OKIB
@@ -816,44 +816,44 @@ async def noib(ctx):
                 content=_list_content)
         ))
         
-async def okib_on_reaction_add(reaction, user):
+async def okib_on_reaction_add(channel_id, message_id, emoji, member):
     global _okib_members
     global _laterib_members
     global _noib_members
     global _gathered
     
-    if reaction.message.id == _okib_message_id and user.bot == False:
+    if message_id == _okib_message_id and member.bot == False:
         modify = False 
-        if user.roles[-1] >= _guild.get_role(params.PEON_ID) or _okib_channel == _bnet_channel:
+        if member.roles[-1] >= _guild.get_role(params.PEON_ID) or _okib_channel == _bnet_channel:
             try:
-                if reaction.emoji == _okib_emote:
-                    if user not in _okib_members:
-                        _okib_members.append(user)
+                if emoji == _okib_emote:
+                    if member not in _okib_members:
+                        _okib_members.append(member)
                         modify = True
-                    if user in _noib_members:
-                        _noib_members.remove(user)
+                    if member in _noib_members:
+                        _noib_members.remove(member)
                         modify = True
-                    if user in _laterib_members:
-                        _laterib_members.remove(user)
+                    if member in _laterib_members:
+                        _laterib_members.remove(member)
 
-                elif reaction.emoji == _noib_emote:
-                    if user not in _noib_members:
-                        _noib_members.append(user)
+                elif emoji == _noib_emote:
+                    if member not in _noib_members:
+                        _noib_members.append(member)
                         modify = True
-                    if user in _okib_members:
-                        _okib_members.remove(user)
+                    if member in _okib_members:
+                        _okib_members.remove(member)
                         modify = True
-                    if user in _laterib_members:
-                        _laterib_members.remove(user)
+                    if member in _laterib_members:
+                        _laterib_members.remove(member)
                 
-                elif reaction.emoji == _laterib_emote:
-                    if user not in _laterib_members:
-                        _laterib_members.append(user)
-                    if user in _noib_members:
-                        _noib_members.remove(user)
+                elif emoji == _laterib_emote:
+                    if member not in _laterib_members:
+                        _laterib_members.append(member)
+                    if member in _noib_members:
+                        _noib_members.remove(member)
                         modify = True
-                    if user in _okib_members:
-                        _okib_members.remove(user)
+                    if member in _okib_members:
+                        _okib_members.remove(member)
                         modify = True
                 
             except AttributeError as e:
@@ -871,7 +871,7 @@ async def okib_on_reaction_add(reaction, user):
                             (await _okib_channel.fetch_message(_okib_message_id)).edit,
                             content=_list_content
                         ),
-                        functools.partial(reaction.remove,user)
+                        functools.partial(remove_reaction, channel_id, message_id, emoji, member)
                     ))
                     _gathered = True
                 else:
@@ -881,12 +881,12 @@ async def okib_on_reaction_add(reaction, user):
                             (await _okib_channel.fetch_message(_okib_message_id)).edit,
                             content=_list_content
                         ),
-                        functools.partial(reaction.remove, user),
+                        functools.partial(remove_reaction, channel_id, message_id, emoji, member),
                         check_almost_gather
                     ))
                 return
-        #justremove   
-        await ensure_display(functools.partial(reaction.remove, user))
+        #justremove
+        await ensure_display(remove_reaction, channel_id, message_id, emoji, member)
 
 
 async def pub_host_promote(member):
@@ -1323,39 +1323,43 @@ async def refresh_ib_lobbies():
     async with _update_lobbies_lock:
         await update_ib_lobbies()
 
-async def lobbies_on_reaction_add(reaction, user):
-    if user.bot or (reaction.emoji != BELL_EMOJI and reaction.emoji != NOBELL_EMOJI):
+async def lobbies_on_reaction_add(channel_id, message_id, emoji, member):
+    if member.bot or (emoji != BELL_EMOJI and emoji != NOBELL_EMOJI):
         return
 
     match_lobby = False
     async with _update_lobbies_lock:
         for lobby in _open_lobbies:
             message_id = lobby_get_message_id(lobby)
-            if reaction.message.id == message_id:
+            if message_id == message_id:
                 match_lobby = True
                 updated = False
-                if reaction.emoji == BELL_EMOJI and user not in lobby.subscribers:
-                    logging.info("User {} subbed to lobby {}".format(user.display_name, lobby))
-                    lobby.subscribers.append(user)
+                if emoji == BELL_EMOJI and member not in lobby.subscribers:
+                    logging.info("User {} subbed to lobby {}".format(member.display_name, lobby))
+                    lobby.subscribers.append(member)
                     updated = True
-                if reaction.emoji == NOBELL_EMOJI and user in lobby.subscribers:
-                    logging.info("User {} unsubbed from lobby {}".format(user.display_name, lobby))
-                    lobby.subscribers.remove(user)
+                if emoji == NOBELL_EMOJI and member in lobby.subscribers:
+                    logging.info("User {} unsubbed from lobby {}".format(member.display_name, lobby))
+                    lobby.subscribers.remove(member)
                     updated = True
 
                 if updated:
                     await lobby_update_message(lobby)
 
     if match_lobby:
-        await ensure_display(reaction.remove, user)
+        await ensure_display(remove_reaction, channel_id, message_id, emoji, member)
 
 # ==== MAIN ========================================================================================
 
 @_client.event
-async def on_reaction_add(reaction, user):
+async def on_raw_reaction_add(payload):
     await asyncio.gather(
-        okib_on_reaction_add(reaction, user),
-        lobbies_on_reaction_add(reaction, user),
+        okib_on_reaction_add(
+            payload.channel_id, payload.message_id, payload.emoji, payload.member
+        ),
+        lobbies_on_reaction_add(
+            payload.channel_id, payload.message_id, payload.emoji, payload.member
+        ),
         return_exceptions=True
     )
 
