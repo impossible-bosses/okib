@@ -54,7 +54,7 @@ class Message:
         self.message = message
 
 class MessageHub:
-    MAX_AGE_SECONDS = 30
+    MAX_AGE_SECONDS = 5 * 60
 
     def __init__(self):
         self._message_queues = {}
@@ -448,7 +448,9 @@ async def ensure_display(func, *args, window=2, return_name=None, **kwargs):
         # Only create a backup callback if no ENSURE_DISPLAY messages have been seen for the given
         # timeout window. If a return_name is given, we require previous messages to have
         # that return name as well.
+        print("ensure_display waiting on master")
         if not _message_hub.got_message(MessageType.ENSURE_DISPLAY, window, return_name):
+            print("ensure_display writing timed callback")
             _callbacks.append(TimedCallback(window, ensure_display_backup, func, *args, window=window, return_name=return_name, **kwargs))
 
 @_client.command()
@@ -855,7 +857,8 @@ async def okib_on_reaction_add(reaction, user):
             except AttributeError as e:
                 traceback.print_exc()
                 pass
-                
+            
+            print("modify: {}".format(modify))
             if modify:
                 await list_update()
                 #remove&edit
@@ -1349,6 +1352,9 @@ async def lobbies_on_reaction_add(reaction, user):
 
 @_client.event
 async def on_reaction_add(reaction, user):
+    print("on_reaction_add")
+    print(reaction)
+    print(user)
     await asyncio.gather(
         okib_on_reaction_add(reaction, user),
         lobbies_on_reaction_add(reaction, user),
