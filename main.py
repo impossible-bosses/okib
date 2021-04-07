@@ -583,6 +583,10 @@ NOIB_EMOJI_STRING = "<:noib:{}>".format(NOIB_EMOJI_ID)
 OKIB_GATHER_EMOJI_STRING = "<:ib:{}><:ib2:{}>".format(IB_EMOJI_ID, IB2_EMOJI_ID)
 OKIB_GATHER_PLAYERS = 8 # not pointless - sometimes I use this for testing
 
+PUB_HOST_ROLE_ID = 791279611311947796
+PUB_GAMES_CHANNEL_ID = 659868050933415979
+INHOUSE_HIGH_DIFF_ID = 773295175463469087
+
 _okib_emote = None
 _laterib_emote = None
 _noib_emote = None
@@ -670,7 +674,13 @@ async def okib(ctx, arg=None):
     global _gather_time
 
     adv = False
-    if ctx.message.author.roles[-1] <= _guild.get_role(params.PEON_ID):
+    #PUB OKIB
+    if ctx.channel ==  _bnet_channel :
+        if ctx.message.author.roles[-1] < _guild.get_role(PUB_HOST_ROLE_ID):
+            await ensure_display(ctx.channel.send, NO_POWER_MSG)
+            return
+    #/PUB OKIB
+    elif ctx.message.author.roles[-1] <= _guild.get_role(params.PEON_ID):
         await ensure_display(ctx.channel.send, NO_POWER_MSG)
         return
     if ctx.message.author.roles[-1] >= _guild.get_role(params.SHAMAN_ID) or ctx.message.author == _gatherer:
@@ -756,7 +766,11 @@ async def noib(ctx):
     global _okib_channel
     global _okib_message_id
     
-    if ctx.message.author.roles[-1] <= _guild.get_role(params.PEON_ID):
+    #PUB OKIB
+    if ctx.channel ==  _bnet_channel and ctx.message.author.roles[-1] >= _guild.get_role(PUB_HOST_ROLE_ID):
+        pass
+    #/PUB OKIB
+    elif ctx.message.author.roles[-1] <= _guild.get_role(params.PEON_ID):
         await ensure_display(ctx.channel.send, NO_POWER_MSG)
         return
     if ctx.message.author.roles[-1] < _guild.get_role(params.SHAMAN_ID) and ctx.message.author != _gatherer:
@@ -807,7 +821,7 @@ async def okib_on_reaction_add(reaction, user):
     
     if reaction.message.id == _okib_message_id and user.bot == False:
         modify = False 
-        if user.roles[-1] >= _guild.get_role(params.PEON_ID):
+        if user.roles[-1] >= _guild.get_role(params.PEON_ID) or _okib_channel == _bnet_channel:
             try:
                 if reaction.emoji == _okib_emote:
                     if user not in _okib_members:
@@ -870,9 +884,14 @@ async def okib_on_reaction_add(reaction, user):
         #justremove   
         await ensure_display(functools.partial(reaction.remove, user))
 
+
+async def pub_host_promote(member):
+    channel = await member.create_dm()
+    await ensure_display(channel.send, "Congratulation on being promoted to pub host !\nYou are now able to start a gather for IB games on the pub-games channel. To do so, use !okib command to start it, and !noib command to end/cancel it. Others have to answer with the :okib: and the :noib: reactions. Now you can get an idea of who in the discord is up to play a game without having to guess which players will come back, and discord members can express their interest in playing without needing to leave a message which may not be seen. By starting a gather, you're confirming you can host the game when it reach 8 players, within 20 mins. You'll get notified when it reaches 8 players.")
+
 async def peon_promote(member):
     channel = await member.create_dm()
-    await ensure_display(channel.send, "Congratulation on being promoted to peon !\nYou are now able to register for official ENT games. To do so, you have to use the :okib: and the :noib: reactions when the clan is looking for ENT players. By declaring you up for a game, you're confirming you can join the game when it starts within 20 mins. You'll get notified when we reach desired number of players and when the game is actually hosted.")
+    await ensure_display(channel.send, "Congratulation on being promoted to peon !\nYou are now able to register for official ENT games. To do so, you have to use the :okib: and the :noib: reactions when the clan is looking for ENT players. By declaring you up for a game, you're confirming you can join the game when it starts, within 20 mins. You'll get notified when we reach desired number of players and when the game is actually hosted.")
 
 async def grunt_promote(member):
     channel = await member.create_dm()
@@ -886,6 +905,9 @@ async def shaman_promote(member):
 async def on_member_update(before, after):
     if before.guild == _guild:
         #promoted
+        if before.roles[-1] < _guild.get_role(PUB_HOST_ROLE_ID) and after.roles[-1] == _guild.get_role(PUB_HOST_ROLE_ID):
+            await pub_host_promote(after)
+            
         if before.roles[-1] < _guild.get_role(params.SHAMAN_ID) and before.roles[-1] > _guild.get_role(params.PEON_ID):
             #was grunt
             if after.roles[-1] >= _guild.get_role(params.SHAMAN_ID):
