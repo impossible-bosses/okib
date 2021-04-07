@@ -852,7 +852,8 @@ async def okib_on_reaction_add(reaction, user):
                         _okib_members.remove(user)
                         modify = True
                 
-            except AttributeError:
+            except AttributeError as e:
+                traceback.print_exc()
                 pass
                 
             if modify:
