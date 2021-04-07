@@ -1329,21 +1329,21 @@ async def refresh_ib_lobbies():
         await update_ib_lobbies()
 
 async def lobbies_on_reaction_add(channel_id, message_id, emoji, member):
-    if member.bot or (emoji != BELL_EMOJI and emoji != NOBELL_EMOJI):
+    if member.bot or not emoji.is_unicode_emoji() or (emoji.name != BELL_EMOJI and emoji.name != NOBELL_EMOJI):
         return
 
     match_lobby = False
     async with _update_lobbies_lock:
         for lobby in _open_lobbies:
-            message_id = lobby_get_message_id(lobby)
-            if message_id == message_id:
+            lobby_message_id = lobby_get_message_id(lobby)
+            if lobby_message_id == message_id:
                 match_lobby = True
                 updated = False
-                if emoji == BELL_EMOJI and member not in lobby.subscribers:
+                if emoji.name == BELL_EMOJI and member not in lobby.subscribers:
                     logging.info("User {} subbed to lobby {}".format(member.display_name, lobby))
                     lobby.subscribers.append(member)
                     updated = True
-                if emoji == NOBELL_EMOJI and member in lobby.subscribers:
+                if emoji.name == NOBELL_EMOJI and member in lobby.subscribers:
                     logging.info("User {} unsubbed from lobby {}".format(member.display_name, lobby))
                     lobby.subscribers.remove(member)
                     updated = True
