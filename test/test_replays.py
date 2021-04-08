@@ -3,7 +3,7 @@ import requests
 
 from replays import ReplayData, Difficulty
 
-class TestCaseWc3Stats:
+class CaseWc3Stats:
 	def __init__(self, replay_id, map_file, difficulty, continues, win):
 		self.replay_id = replay_id
 		self.map_file = map_file
@@ -12,30 +12,72 @@ class TestCaseWc3Stats:
 		self.win = win
 
 @pytest.mark.parametrize("test_case", [
-	TestCaseWc3Stats(
+	CaseWc3Stats(
 		99971,
 		"Impossible.Bosses.v1.11.4-nobnet",
 		Difficulty.N,
 		continues=True,
 		win=False
 	),
-	TestCaseWc3Stats(
+	CaseWc3Stats(
 		100502,
 		"Impossible.Bosses.v1.11.4-nobnet",
 		Difficulty.N,
 		continues=True,
 		win=True
 	),
-	TestCaseWc3Stats(
+	CaseWc3Stats(
 		100713,
 		"Impossible.Bosses.v1.11.5-no-bnet",
 		Difficulty.N,
 		continues=True,
 		win=True
 	),
-	TestCaseWc3Stats(
+	CaseWc3Stats(
 		100995,
 		"Impossible.Bosses.v1.11.5-no-bnet",
+		Difficulty.H,
+		continues=True,
+		win=True
+	),
+	CaseWc3Stats(
+		101252,
+		"Impossible.Bosses.v1.11.5-no-bnet",
+		Difficulty.H,
+		continues=True,
+		win=True
+	),
+	CaseWc3Stats(
+		101359,
+		"Impossible.Bosses.v1.11.5-no-bnet",
+		Difficulty.N,
+		continues=True,
+		win=False
+	),
+	CaseWc3Stats(
+		101527,
+		"Impossible.Bosses.v1.11.6-no-bnet",
+		Difficulty.H,
+		continues=True,
+		win=True
+	),
+	CaseWc3Stats(
+		101870,
+		"Impossible.Bosses.v1.11.6",
+		Difficulty.E,
+		continues=True,
+		win=False
+	),
+	CaseWc3Stats(
+		101888,
+		"Impossible.Bosses.v1.11.6",
+		Difficulty.E,
+		continues=True,
+		win=True
+	),
+	CaseWc3Stats(
+		101939,
+		"Impossible.Bosses.v1.11.6-no-bnet",
 		Difficulty.H,
 		continues=True,
 		win=True
