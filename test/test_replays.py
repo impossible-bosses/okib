@@ -81,6 +81,13 @@ class CaseWc3Stats:
 		Difficulty.H,
 		continues=True,
 		win=True
+	),
+	CaseWc3Stats(
+		105240,
+		"Impossible.Bosses.v1.11.6-no-bnet",
+		Difficulty.H,
+		continues=True,
+		win=True
 	)
 ])
 def test_wc3stats_replay(test_case):
