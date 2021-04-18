@@ -117,17 +117,17 @@ class ReplayData:
         for player in game["players"]:
             if len(player["flags"]) == 1:
                 flag_player = player["flags"][0]
-                if flag == None:
+                if flag is None:
                     flag = flag_player
-                elif flag_player == None:
+                elif flag_player is None:
                     continue
                 elif flag != flag_player:
                     raise ValueError("Inconsistent flags: {} and {}".format(flag, flag_player))
 
             difficulty_player = player["variables"]["difficulty"]
-            if difficulty == None:
+            if difficulty is None:
                 difficulty = difficulty_player
-            elif difficulty_player == None:
+            elif difficulty_player is None:
                 continue
             elif difficulty != difficulty_player:
                 raise ValueError("Inconsistent difficulties: {} and {}".format(difficulty, difficulty_player))
@@ -137,17 +137,19 @@ class ReplayData:
                 continues_player = player["variables"]["contines"]
             else:
                 continues_player = player["variables"]["continues"]
-            if continues == None:
+            if continues is None:
                 continues = continues_player
-            elif continues_player == None:
+            elif continues_player is None:
                 continue
             elif continues != continues_player:
                 raise ValueError("Inconsistent difficulties: {} and {}".format(continues, continues_player))
 
         if flag == "winner":
             self.win = True
-        elif flag == "loser" or flag == None:
+        elif flag == "loser" or flag is None:
             self.win = False
+        elif flag is None:
+            raise ValueError("No flag values found")
         else:
             raise ValueError("Invalid flag: {}".format(flag))
 
