@@ -417,15 +417,12 @@ async def ensure_display_backup(func, *args, window=2, return_name=None, **kwarg
             await self_promote()
 
         _is_master_timeout = False
-        print("resolving master timeout")
         # All other callbacks including this one need to execute, but not resolve master's timeout
         for callback in _callbacks:
-            print("callback!")
             callback.cancel()
             await callback.callback()
         _is_master_timeout = True
     else:
-        print("running func {}".format(func))
         await ensure_display(func, *args, window=window, return_name=return_name, **kwargs)
 
 async def ensure_display(func, *args, window=2, return_name=None, **kwargs):
