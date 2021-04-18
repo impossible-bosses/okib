@@ -404,7 +404,7 @@ async def ensure_display_backup(func, *args, window=2, return_name=None, **kwarg
     global _callbacks
     global _is_master_timeout
 
-    logging.info("ensure_display_backup: old master {}, instances {}".format(_master_instance, _alive_instances))
+    logging.info("ensure_display_backup: _master_instance {}, _alive_instances {}".format(_master_instance, _alive_instances))
 
     if _is_master_timeout:
         if _master_instance == None:
@@ -663,7 +663,8 @@ async def up(ctx):
     global _okib_message_id
     
     if _okib_message_id is not None:
-        await (await _okib_channel.fetch_message(_okib_message_id)).delete()
+        message = await _okib_channel.fetch_message(_okib_message_id)
+        await message.delete()
 
     okib_message = await ctx.send(_list_content)
     await okib_message.add_reaction(_okib_emote)
@@ -745,7 +746,7 @@ async def okib(ctx, arg=None):
         await list_update()
         gather_check()
         if _gathered:
-            await ensure_display(up, ctx, 2, return_name="_okib_message_id")
+            await ensure_display(up, ctx, return_name="_okib_message_id")
     elif modify:
         await list_update()
         if gather_check():
