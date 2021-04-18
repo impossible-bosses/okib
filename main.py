@@ -330,7 +330,7 @@ async def parse_bot_com(from_id, message_type, message, attachment):
             message_trim = message[:-1]
             _alive_instances.add(params.BOT_ID)
             _master_instance = from_id
-            for callback in _callbacks:
+            for callback in _callbacks: # clear init's self_promote callback
                 callback.cancel()
             _callbacks = []
         version = int(message_trim)
@@ -417,12 +417,15 @@ async def ensure_display_backup(func, *args, window=2, return_name=None, **kwarg
             await self_promote()
 
         _is_master_timeout = False
-        # Other active callbacks just need to execute, but not resolve master's timeout
+        print("resolving master timeout")
+        # All other callbacks including this one need to execute, but not resolve master's timeout
         for callback in _callbacks:
+            print("callback!")
             callback.cancel()
             await callback.callback()
         _is_master_timeout = True
     else:
+        print("running func {}".format(func))
         await ensure_display(func, *args, window=window, return_name=return_name, **kwargs)
 
 async def ensure_display(func, *args, window=2, return_name=None, **kwargs):
@@ -788,8 +791,6 @@ async def noib(ctx):
         pass
 
     if not ctx.message.mentions:
-        
-        
         if _okib_message_id is not None:
             await ensure_display(functools.partial(
                 combinator3000,
