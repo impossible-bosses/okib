@@ -42,7 +42,7 @@ except Exception:
     GUILD_NAME = params.GUILD_NAME
     COM_GUILD_ID = params.COM_GUILD_ID
     COM_CHANNEL_ID = params.COM_CHANNEL_ID
-    PUB_HOST_ID = params.PUB_HOST_ID
+    PUB_HOST_ID = 791279611311947796
     PEON_ID = params.PEON_ID
     SHAMAN_ID = params.SHAMAN_ID
 
