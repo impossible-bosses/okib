@@ -22,6 +22,30 @@ from replays import ReplayData, replays_load_emojis
 
 ROOT_DIR = os.path.dirname(os.path.realpath(__file__))
 
+
+#PARAMS AND CONSTANTS LOAD
+#PARAMS
+BOT_ID = params.BOT_ID
+BOT_TOKEN = params.BOT_TOKEN
+REBOOT_ON_UPDATE = params.REBOOT_ON_UPDATE
+
+#CONSTANTS
+try:
+    import constants
+    GUILD_NAME = constants.GUILD_NAME
+    COM_GUILD_ID = constants.COM_GUILD_ID
+    COM_CHANNEL_ID = constants.COM_CHANNEL_ID
+    PUB_HOST_ID = constants.PUB_HOST_ID
+    PEON_ID = constants.PEON_ID
+    SHAMAN_ID = constants.SHAMAN_ID  
+except Exception:
+    GUILD_NAME = params.GUILD_NAME
+    COM_GUILD_ID = params.COM_GUILD_ID
+    COM_CHANNEL_ID = params.COM_CHANNEL_ID
+    PUB_HOST_ID = 791279611311947796
+    PEON_ID = params.PEON_ID
+    SHAMAN_ID = params.SHAMAN_ID
+
 def get_source_version():
     repo = git.Repo(ROOT_DIR)
     head_commit_sha = repo.head.commit.binsha
@@ -54,7 +78,7 @@ class Message:
         self.message = message
 
 class MessageHub:
-    MAX_AGE_SECONDS = 30
+    MAX_AGE_SECONDS = 5 * 60
 
     def __init__(self):
         self._message_queues = {}
@@ -106,6 +130,7 @@ print("Source version {}".format(VERSION))
 # discord connection
 client_intents = discord.Intents().default()
 client_intents.members = True
+client_intents.reactions = True
 _client = discord.ext.commands.Bot(command_prefix="!", intents=client_intents)
 _client.remove_command("help")
 
@@ -148,7 +173,7 @@ async def com(to_id, message_type, message = "", file = None):
     assert isinstance(message, str)
 
     payload = "/".join([
-        str(params.BOT_ID),
+        str(BOT_ID),
         str(to_id),
         message_type.value,
         message
@@ -177,13 +202,58 @@ async def send_db(to_id):
 
 def update_workspace(workspace_bytes):
     global _open_lobbies
+    global _okib_channel
+    global _okib_message_id
+    global _list_content
+    global _okib_members
+    global _laterib_members
+    global _noib_members
+    global _gatherer
+    global _gathered
+    global _gather_time
 
     workspace_obj = pickle.loads(workspace_bytes)
     logging.info("Updating workspace: {}".format(workspace_obj))
 
+    # Lobbies
     _open_lobbies = workspace_obj["open_lobbies"]
     for key, value in workspace_obj["lobby_message_ids"].items():
         globals()[key] = value
+
+    # OKIB
+    channel_id = workspace_obj["okib_channel_id"]
+    if channel_id != None:
+        _okib_channel = _client.get_channel(channel_id)
+        if _okib_channel == None:
+            logging.error("Failed to get OKIB channel from id {}".format(channel_id))
+            return False
+
+    _okib_message_id = workspace_obj["okib_message_id"]
+    _list_content = workspace_obj["list_content"]
+
+    _okib_members = [_guild.get_member(mid) for mid in workspace_obj["okib_member_ids"]]
+    if None in _okib_members:
+        logging.error("Failed to get an OKIB member from ID, {} from {}".format(_okib_members, workspace_obj["okib_member_ids"]))
+        return False
+    _laterib_members = [_guild.get_member(mid) for mid in workspace_obj["laterib_member_ids"]]
+    if None in _laterib_members:
+        logging.error("Failed to get a laterIB member from ID, {} from {}".format(_laterib_members, workspace_obj["laterib_member_ids"]))
+        return False
+    _noib_members = [_guild.get_member(mid) for mid in workspace_obj["noib_member_ids"]]
+    if None in _noib_members:
+        logging.error("Failed to get a member from ID, {} from {}".format(_noib_members, workspace_obj["noib_member_ids"]))
+        return False
+
+    gatherer_id = workspace_obj["gatherer_id"]
+    if gatherer_id != None:
+        _gatherer = _guild.get_member(gatherer_id)
+        if _gatherer == None:
+            logging.error("Failed to get member from id {}".format(gatherer_id))
+            return False
+
+    _gathered = workspace_obj["gathered"]
+    _gather_time = workspace_obj["gather_time"]
+    return True
 
 async def send_workspace(to_id):
     lobby_message_ids = {}
@@ -191,9 +261,22 @@ async def send_workspace(to_id):
         if "lobbymsg" in key:
             lobby_message_ids[key] = value
 
+
     workspace_obj = {
+        # Lobbies
         "open_lobbies": _open_lobbies,
-        "lobby_message_ids": lobby_message_ids
+        "lobby_message_ids": lobby_message_ids,
+
+        # OKIB
+        "okib_channel_id": None if _okib_channel == None else _okib_channel.id,
+        "okib_message_id": _okib_message_id,
+        "list_content": _list_content,
+        "okib_member_ids": [m.id for m in _okib_members],
+        "laterib_member_ids": [m.id for m in _laterib_members],
+        "noib_member_ids": [m.id for m in _noib_members],
+        "gatherer_id": None if _gatherer == None else _gatherer.id,
+        "gathered": _gathered,
+        "gather_time": _gather_time
     }
     logging.info("Sending workspace: {}".format(workspace_obj))
 
@@ -211,13 +294,15 @@ def update_source_and_reset():
             logging.info("New version: {}".format(new_version))
             if new_version <= VERSION:
                 logging.error("Attempted to update, but version didn't upgrade ({} to {})".format(VERSION, new_version))
-
-            if params.REBOOT_ON_UPDATE:
-                logging.info("Rebooting")
-                os.system("sudo shutdown -r now")
-            else:
-                logging.info("Exiting")
-                exit()
+            reboot()
+            
+def reboot():
+    if REBOOT_ON_UPDATE:
+        logging.info("Rebooting")
+        os.system("sudo shutdown -r now")
+    else:
+        logging.info("Exiting")
+        exit()
 
 def parse_ensure_display_value(message):
     kv = message.split("=")
@@ -269,9 +354,9 @@ async def parse_bot_com(from_id, message_type, message, attachment):
         if message[-1] == "+":
             logging.info("Received connect ack from master instance {}".format(from_id))
             message_trim = message[:-1]
-            _alive_instances.add(params.BOT_ID)
+            _alive_instances.add(BOT_ID)
             _master_instance = from_id
-            for callback in _callbacks:
+            for callback in _callbacks: # clear init's self_promote callback
                 callback.cancel()
             _callbacks = []
         version = int(message_trim)
@@ -301,7 +386,8 @@ async def parse_bot_com(from_id, message_type, message, attachment):
         pass
     elif message_type == MessageType.SEND_WORKSPACE:
         workspace_bytes = await attachment.read()
-        update_workspace(workspace_bytes)
+        if not update_workspace(workspace_bytes):
+            pass # TODO eh, whatever...
         await com(from_id, MessageType.SEND_WORKSPACE_ACK)
         # This is the last step for bot instance connection
         _initialized = True
@@ -320,10 +406,10 @@ async def self_promote():
 
     _initialized = True
     _im_master = True
-    _master_instance = params.BOT_ID
+    _master_instance = BOT_ID
     # Needed for initialization. Alternatively, can use function arg (what archi was doing)
-    if params.BOT_ID not in _alive_instances:
-        _alive_instances.add(params.BOT_ID)
+    if BOT_ID not in _alive_instances:
+        _alive_instances.add(BOT_ID)
     await com(-1, MessageType.LET_MASTER)
     logging.info("I'm in charge!")
 
@@ -344,7 +430,7 @@ async def ensure_display_backup(func, *args, window=2, return_name=None, **kwarg
     global _callbacks
     global _is_master_timeout
 
-    logging.info("ensure_display_backup: old master {}, instances {}".format(_master_instance, _alive_instances))
+    logging.info("ensure_display_backup: _master_instance {}, _alive_instances {}".format(_master_instance, _alive_instances))
 
     if _is_master_timeout:
         if _master_instance == None:
@@ -353,11 +439,11 @@ async def ensure_display_backup(func, *args, window=2, return_name=None, **kwarg
             _alive_instances.remove(_master_instance)
             _master_instance = None
 
-        if max(_alive_instances) == params.BOT_ID:
+        if max(_alive_instances) == BOT_ID:
             await self_promote()
 
         _is_master_timeout = False
-        # Other active callbacks just need to execute, but not resolve master's timeout
+        # All callbacks including this one now need to execute, but not resolve master's timeout
         for callback in _callbacks:
             callback.cancel()
             await callback.callback()
@@ -406,7 +492,7 @@ async def update(ctx, bot_id):  # TODO default bot_id=None ??
     global _alive_instances
 
     bot_id = int(bot_id)
-    if bot_id == params.BOT_ID:
+    if bot_id == BOT_ID:
         # No ensure_display here because this isn't a distributed action
         await ctx.channel.send("Updating code and restarting...")
         update_source_and_reset()
@@ -418,7 +504,7 @@ async def update(ctx, bot_id):  # TODO default bot_id=None ??
 
         if _master_instance == bot_id:
             _master_instance = None
-            if max(_alive_instances) == params.BOT_ID:
+            if max(_alive_instances) == BOT_ID:
                 await self_promote()
 
 @_client.event
@@ -436,35 +522,38 @@ async def on_ready():
     global _EU_role
     global _NA_role
     global _KR_role
+
+    BNET_CHANNEL_NAME = "pub-games"
+    ENT_CHANNEL_NAME = "general-chat"
     
     guild_ib = None
     guild_com = None
     for guild in _client.guilds:
-        if guild.name == params.GUILD_NAME:
+        if guild.name == GUILD_NAME:
             guild_ib = guild
-        if guild.id == params.COM_GUILD_ID:
+        if guild.id == COM_GUILD_ID:
             guild_com = guild
 
     if guild_ib is None:
-        raise Exception("IB guild not found: \"{}\"".format(params.GUILD_NAME))
+        raise Exception("IB guild not found: \"{}\"".format(GUILD_NAME))
     if guild_com is None:
         raise Exception("Com virtual guild not found")
 
     channel_bnet = None
     channel_ent = None
     for channel in guild_ib.text_channels:
-        if channel.name == params.BNET_CHANNEL_NAME:
+        if channel.name == BNET_CHANNEL_NAME:
             channel_bnet = channel
-        if channel.name == params.ENT_CHANNEL_NAME:
+        if channel.name == ENT_CHANNEL_NAME:
             channel_ent = channel
     if channel_bnet is None:
-        raise Exception("Pub channel not found: \"{}\" in guild \"{}\"".format(params.BNET_CHANNEL_NAME, guild_ib.name))
+        raise Exception("Pub channel not found: \"{}\" in guild \"{}\"".format(BNET_CHANNEL_NAME, guild_ib.name))
     if channel_ent is None:
-        raise Exception("ENT channel not found: \"{}\" in guild \"{}\"".format(params.ENT_CHANNEL_NAME, guild_ib.name))
+        raise Exception("ENT channel not found: \"{}\" in guild \"{}\"".format(ENT_CHANNEL_NAME, guild_ib.name))
 
     channel_com = None
     for channel in guild_com.text_channels:
-        if channel.id == params.COM_CHANNEL_ID:
+        if channel.id == COM_CHANNEL_ID:
             channel_com = channel
     if channel_com is None:
         raise Exception("Com channel not found")
@@ -501,7 +590,7 @@ async def on_message(message):
         to_id = int(message_split[1])
         message_type = MessageType(message_split[2])
         content = message_split[3]
-        if from_id != params.BOT_ID and (to_id == -1 or to_id == params.BOT_ID):
+        if from_id != BOT_ID and (to_id == -1 or to_id == BOT_ID):
             # from another bot instance
             logging.info("Communication received from {} to {}, {}, content = {}".format(from_id, to_id, message_type, content))
 
@@ -512,6 +601,12 @@ async def on_message(message):
     else:
         await check_replay(message)
         await _client.process_commands(message)
+
+async def remove_reaction(channel_id, message_id, emoji, member):
+    channel = _client.get_channel(channel_id)
+    message = await channel.fetch_message(message_id)
+    await message.remove_reaction(emoji, member)
+
 
 # ==== OKIB ========================================================================================
 
@@ -526,16 +621,13 @@ NOIB_EMOJI_STRING = "<:noib:{}>".format(NOIB_EMOJI_ID)
 OKIB_GATHER_EMOJI_STRING = "<:ib:{}><:ib2:{}>".format(IB_EMOJI_ID, IB2_EMOJI_ID)
 OKIB_GATHER_PLAYERS = 8 # not pointless - sometimes I use this for testing
 
-PUB_HOST_ROLE_ID = 791279611311947796
-PUB_GAMES_CHANNEL_ID = 659868050933415979
-INHOUSE_HIGH_DIFF_ID = 773295175463469087
+_okib_emote = None
+_laterib_emote = None
+_noib_emote = None
 
 _okib_channel =  None
 _okib_message_id = None
 _list_content = ""
-_okib_emote = None
-_laterib_emote = None
-_noib_emote = None
 _okib_members = []
 _laterib_members = []
 _noib_members = []
@@ -545,8 +637,6 @@ _gather_time = datetime.datetime.now()
 
 async def gather():
     gather_list_string = " ".join([member.mention for member in _okib_members])
-    # TODO combine these? can't combine the message sends, but can combine the ensure_display
-    # you doing it wront => the purpose of making a encapsulating function is to actually ensuredisplay the whole thing not everything inside it ^^
     await _okib_channel.send(gather_list_string + " Time to play !")
     await _okib_channel.send(OKIB_EMOJI_STRING)
     for member in _okib_members:
@@ -568,15 +658,14 @@ async def list_update():
     okib_list_string = ", ".join([member.display_name for member in _okib_members])
     noib_list_string = ", ".join([member.display_name for member in _noib_members])
     _list_content = "{} asks : {}\n{} {}/{} : {}\n{} : {}".format(
-        _gatherer.display_name,OKIB_GATHER_EMOJI_STRING,
+        _gatherer.display_name, OKIB_GATHER_EMOJI_STRING,
         OKIB_EMOJI_STRING, len(_okib_members), OKIB_GATHER_PLAYERS, okib_list_string,
         NOIB_EMOJI_STRING, noib_list_string
     )
-    #await ensure_display((_okib_channel.fetch_message(_okib_message_id)).edit, content=_list_content)
 
 async def check_almost_gather():
     #print(len(_okib_members)+round(0.1+len(_laterib_members)/2))
-    if len(_okib_members)+round(0.1+len(_laterib_members)/2) >= OKIB_GATHER_PLAYERS and not _gathered :
+    if len(_okib_members)+round(0.1+len(_laterib_members)/2) >= OKIB_GATHER_PLAYERS and not _gathered:
         for member in _laterib_members:
             try:
                 await member.send("Hey, you are :laterib: and our radar indicates that the lobby gather is almost completed !! \nThis might be a great time for you to think about :okib: ;)")
@@ -589,7 +678,6 @@ def gather_check():
     global _gathered
     if len(_okib_members) >= OKIB_GATHER_PLAYERS and not _gathered:
         return True
-        #ensure_display(functools.partial(combinator3000,(_okib_channel.fetch_message(_okib_message_id)).edit,gather,content=_list_content))) 
     if len(_okib_members) < OKIB_GATHER_PLAYERS and _gathered:
         _gathered = False
         return False
@@ -597,8 +685,9 @@ def gather_check():
 async def up(ctx):
     global _okib_message_id
     
-    if _okib_message_id is not None :
-        await (await _okib_channel.fetch_message(_okib_message_id)).delete()
+    if _okib_message_id is not None:
+        message = await _okib_channel.fetch_message(_okib_message_id)
+        await message.delete()
 
     okib_message = await ctx.send(_list_content)
     await okib_message.add_reaction(_okib_emote)
@@ -621,21 +710,21 @@ async def okib(ctx, arg=None):
 
     adv = False
     #PUB OKIB
-    if ctx.channel ==  _bnet_channel :
-        if ctx.message.author.roles[-1] < _guild.get_role(PUB_HOST_ROLE_ID):
+    if ctx.channel ==  _bnet_channel:
+        if ctx.message.author.roles[-1] < _guild.get_role(PUB_HOST_ID):
             await ensure_display(ctx.channel.send, NO_POWER_MSG)
             return
     #/PUB OKIB
-    elif ctx.message.author.roles[-1] <= _guild.get_role(params.PEON_ID):
+    elif ctx.message.author.roles[-1] <= _guild.get_role(PEON_ID):
         await ensure_display(ctx.channel.send, NO_POWER_MSG)
         return
-    if ctx.message.author.roles[-1] >= _guild.get_role(params.SHAMAN_ID) or ctx.message.author == _gatherer:
+    if ctx.message.author.roles[-1] >= _guild.get_role(SHAMAN_ID) or ctx.message.author == _gatherer:
         adv = True
     if adv == False and arg != None:
         await ensure_display(ctx.channel.send, NO_POWER_MSG)
         return
     
-    if  _okib_channel is not None and _okib_channel != ctx.channel :
+    if  _okib_channel is not None and _okib_channel != ctx.channel:
         await ensure_display(ctx.channel.send, "gathering is already in progress in channel " + _okib_channel.mention)
         return
     
@@ -653,7 +742,7 @@ async def okib(ctx, arg=None):
     if _okib_channel is None:
         _gatherer = ctx.message.author
         _gather_time = datetime.datetime.now()
-        #Check for option
+        # Check for option
         if adv and arg == 'retrieve':
             pass
         else:
@@ -670,25 +759,39 @@ async def okib(ctx, arg=None):
 
         _okib_channel = ctx.channel
         await list_update()
-        await ensure_display(up,ctx,return_name = "_okib_message_id")
+        await ensure_display(up, ctx, return_name="_okib_message_id")
         modify = False
 
     elif arg == None:
-        await ensure_display(up,ctx,return_name = "_okib_message_id")
+        await ensure_display(up, ctx, return_name="_okib_message_id")
             
     if arg == 'retrieve':
         await list_update()
         gather_check()
         if _gathered:
-            await ensure_display(up,ctx,2,"_okib_message_id")
+            await ensure_display(up, ctx, return_name="_okib_message_id")
     elif modify:
         await list_update()
         if gather_check():
-            #nsure_display(functools.partial(combinator3000,gather,functools.partial((await _okib_channel.fetch_message(_okib_message_id)).edit,content=_list_content),functools.partial(reaction.remove,user)))
-            await ensure_display(functools.partial(combinator3000,ctx.message.delete,functools.partial((await _okib_channel.fetch_message(_okib_message_id)).edit,content=_list_content),gather))
+            await ensure_display(functools.partial(
+                combinator3000,
+                ctx.message.delete,
+                functools.partial(
+                    (await _okib_channel.fetch_message(_okib_message_id)).edit,
+                    content=_list_content),
+                gather
+            ))
             _gathered = True
         else:
-            await ensure_display(functools.partial(combinator3000,ctx.message.delete,check_almost_gather,functools.partial((await _okib_channel.fetch_message(_okib_message_id)).edit, content=_list_content)))
+            await ensure_display(functools.partial(
+                combinator3000,
+                ctx.message.delete,
+                check_almost_gather,
+                functools.partial(
+                    (await _okib_channel.fetch_message(_okib_message_id)).edit,
+                    content=_list_content
+                )
+            ))
 
 @_client.command()
 async def noib(ctx):
@@ -699,23 +802,25 @@ async def noib(ctx):
     global _okib_message_id
     
     #PUB OKIB
-    if ctx.channel ==  _bnet_channel and ctx.message.author.roles[-1] >= _guild.get_role(PUB_HOST_ROLE_ID):
+    if ctx.channel ==  _bnet_channel and ctx.message.author.roles[-1] >= _guild.get_role(PUB_HOST_ID):
         pass
     #/PUB OKIB
-    elif ctx.message.author.roles[-1] <= _guild.get_role(params.PEON_ID):
+    elif ctx.message.author.roles[-1] <= _guild.get_role(PEON_ID):
         await ensure_display(ctx.channel.send, NO_POWER_MSG)
         return
-    if ctx.message.author.roles[-1] < _guild.get_role(params.SHAMAN_ID) and ctx.message.author != _gatherer:
+    if ctx.message.author.roles[-1] < _guild.get_role(SHAMAN_ID) and ctx.message.author != _gatherer:
         if datetime.datetime.now() < (_gather_time + datetime.timedelta(hours=2)):
             await ensure_display(ctx.channel.send, NO_POWER_MSG)
             return
         pass
 
     if not ctx.message.mentions:
-        
-        
         if _okib_message_id is not None:
-            await ensure_display(functools.partial(combinator3000,ctx.message.delete,(await _okib_channel.fetch_message(_okib_message_id)).delete))
+            await ensure_display(functools.partial(
+                combinator3000,
+                ctx.message.delete,
+                (await _okib_channel.fetch_message(_okib_message_id)).delete
+            ))
         _okib_message_id = None
         _okib_channel = None
         
@@ -733,62 +838,85 @@ async def noib(ctx):
     if modify:
         await list_update()
         gather_check()
-        await ensure_display(functools.partial(combinator3000,ctx.message.delete,functools.partial((await _okib_channel.fetch_message(_okib_message_id)).edit, content=_list_content)))
+        await ensure_display(functools.partial(
+            combinator3000,
+            ctx.message.delete,
+            functools.partial(
+                (await _okib_channel.fetch_message(_okib_message_id)).edit,
+                content=_list_content)
+        ))
         
-async def okib_on_reaction_add(reaction, user):
+async def okib_on_reaction_add(channel_id, message_id, emoji, member):
     global _okib_members
     global _laterib_members
     global _noib_members
     global _gathered
     
-    if reaction.message.id == _okib_message_id and user.bot == False:
+    if message_id == _okib_message_id and member.bot == False:
         modify = False 
-        if user.roles[-1] >= _guild.get_role(params.PEON_ID) or _okib_channel == _bnet_channel:
+        if member.roles[-1] >= _guild.get_role(PEON_ID) or _okib_channel == _bnet_channel:
             try:
-                if reaction.emoji == _okib_emote:
-                    if user not in _okib_members:
-                        _okib_members.append(user)
+                if emoji == _okib_emote:
+                    if member not in _okib_members:
+                        _okib_members.append(member)
                         modify = True
-                    if user in _noib_members:
-                        _noib_members.remove(user)
+                    if member in _noib_members:
+                        _noib_members.remove(member)
                         modify = True
-                    if user in _laterib_members:
-                        _laterib_members.remove(user)
+                    if member in _laterib_members:
+                        _laterib_members.remove(member)
 
-                elif reaction.emoji == _noib_emote:
-                    if user not in _noib_members:
-                        _noib_members.append(user)
+                elif emoji == _noib_emote:
+                    if member not in _noib_members:
+                        _noib_members.append(member)
                         modify = True
-                    if user in _okib_members:
-                        _okib_members.remove(user)
+                    if member in _okib_members:
+                        _okib_members.remove(member)
                         modify = True
-                    if user in _laterib_members:
-                        _laterib_members.remove(user)
+                    if member in _laterib_members:
+                        _laterib_members.remove(member)
                 
-                elif reaction.emoji == _laterib_emote:
-                    if user not in _laterib_members:
-                        _laterib_members.append(user)
-                    if user in _noib_members:
-                        _noib_members.remove(user)
+                elif emoji == _laterib_emote:
+                    if member not in _laterib_members:
+                        _laterib_members.append(member)
+                    if member in _noib_members:
+                        _noib_members.remove(member)
                         modify = True
-                    if user in _okib_members:
-                        _okib_members.remove(user)
+                    if member in _okib_members:
+                        _okib_members.remove(member)
                         modify = True
                 
-            except AttributeError:
+            except AttributeError as e:
+                traceback.print_exc()
                 pass
-                
+            
             if modify:
                 await list_update()
                 #remove&edit
                 if gather_check():
-                    await ensure_display(functools.partial(combinator3000,gather,functools.partial((await _okib_channel.fetch_message(_okib_message_id)).edit,content=_list_content),functools.partial(reaction.remove,user)))
+                    await ensure_display(functools.partial(
+                        combinator3000,
+                        gather,
+                        functools.partial(
+                            (await _okib_channel.fetch_message(_okib_message_id)).edit,
+                            content=_list_content
+                        ),
+                        functools.partial(remove_reaction, channel_id, message_id, emoji, member)
+                    ))
                     _gathered = True
                 else:
-                    await ensure_display(functools.partial(combinator3000,functools.partial((await _okib_channel.fetch_message(_okib_message_id)).edit,content=_list_content),functools.partial(reaction.remove,user),check_almost_gather))
+                    await ensure_display(functools.partial(
+                        combinator3000,
+                        functools.partial(
+                            (await _okib_channel.fetch_message(_okib_message_id)).edit,
+                            content=_list_content
+                        ),
+                        functools.partial(remove_reaction, channel_id, message_id, emoji, member),
+                        check_almost_gather
+                    ))
                 return
-        #justremove   
-        await ensure_display(functools.partial(reaction.remove,user))
+        #justremove
+        await ensure_display(remove_reaction, channel_id, message_id, emoji, member)
 
 
 async def pub_host_promote(member):
@@ -811,33 +939,33 @@ async def shaman_promote(member):
 async def on_member_update(before, after):
     if before.guild == _guild:
         #promoted
-        if before.roles[-1] < _guild.get_role(PUB_HOST_ROLE_ID) and after.roles[-1] == _guild.get_role(PUB_HOST_ROLE_ID):
+        if before.roles[-1] < _guild.get_role(PUB_HOST_ID) and after.roles[-1] == _guild.get_role(PUB_HOST_ID):
             await pub_host_promote(after)
             
-        if before.roles[-1] < _guild.get_role(params.SHAMAN_ID) and before.roles[-1] > _guild.get_role(params.PEON_ID):
+        if before.roles[-1] < _guild.get_role(SHAMAN_ID) and before.roles[-1] > _guild.get_role(PEON_ID):
             #was grunt
-            if after.roles[-1] >= _guild.get_role(params.SHAMAN_ID):
+            if after.roles[-1] >= _guild.get_role(SHAMAN_ID):
                 #promoted to shaman
                 await shaman_promote(after)
-        elif before.roles[-1] == _guild.get_role(params.PEON_ID):
+        elif before.roles[-1] == _guild.get_role(PEON_ID):
             #was peon
-            if after.roles[-1] > _guild.get_role(params.PEON_ID) and after.roles[-1] < _guild.get_role(params.SHAMAN_ID):
+            if after.roles[-1] > _guild.get_role(PEON_ID) and after.roles[-1] < _guild.get_role(SHAMAN_ID):
                 #promoted to grunt
                 await grunt_promote(after)
-            elif after.roles[-1] >= _guild.get_role(params.SHAMAN_ID):
+            elif after.roles[-1] >= _guild.get_role(SHAMAN_ID):
                 #promoted to shaman
                 await grunt_promote(after)
                 await shaman_promote(after)
-        elif before.roles[-1] < _guild.get_role(params.PEON_ID):
+        elif before.roles[-1] < _guild.get_role(PEON_ID):
             #was nothing
-            if after.roles[-1] == _guild.get_role(params.PEON_ID):
+            if after.roles[-1] == _guild.get_role(PEON_ID):
                 #promoted to peon3
                 await peon_promote(after)
-            elif after.roles[-1] > _guild.get_role(params.PEON_ID) and after.roles[-1] < _guild.get_role(params.SHAMAN_ID):
+            elif after.roles[-1] > _guild.get_role(PEON_ID) and after.roles[-1] < _guild.get_role(SHAMAN_ID):
                 #promoted to grunt
                 await peon_promote(after)
                 await grunt_promote(after)
-            elif after.roles[-1] >= _guild.get_role(params.SHAMAN_ID):
+            elif after.roles[-1] >= _guild.get_role(SHAMAN_ID):
                 #promoted to shaman
                 await peon_promote(after)
                 await grunt_promote(after)
@@ -852,7 +980,7 @@ def nonquery(query):
 
 @_client.command()
 async def warn(ctx, arg1, *, arg2=""):
-    if ctx.message.author.roles[-1] < _guild.get_role(params.SHAMAN_ID):
+    if ctx.message.author.roles[-1] < _guild.get_role(SHAMAN_ID):
         await ensure_display(ctx.channel.send, NO_POWER_MSG)
         return
 
@@ -863,7 +991,7 @@ async def warn(ctx, arg1, *, arg2=""):
         
 @_client.command()
 async def pedigree(ctx):
-    if ctx.message.author.roles[-1] < _guild.get_role(params.PEON_ID):
+    if ctx.message.author.roles[-1] < _guild.get_role(PEON_ID):
         await ensure_display(ctx.channel.send, NO_POWER_MSG)
         return
 
@@ -951,7 +1079,33 @@ async def sub2(ctx, arg1):
         await ctx.message.author.add_roles(_KR_role)
         await ctx.message.channel.send("KR has been succesfully added in your roles")
 
+@_client.command()
+async def update_constants(ctx):
+    if ctx.message.author.roles[-1] < _guild.get_role(SHAMAN_ID):
+        return
+    else:
+        if len(ctx.message.attachments) > 0:
+            try:
+                B = await ctx.message.attachments[0].read()
+            except Exception:
+                await ctx.message.channel.send(sys.exc_info())
+                return
+            f = open("constants.py","wb")
+            f.write(B)
+            f.close()
+            await ctx.message.channel.send("file updated, now rebooting")
+            reboot()
+            
+@_client.command()
+async def get_constants(ctx):
+    if ctx.message.author.roles[-1] < _guild.get_role(SHAMAN_ID):
+        return
+    else:
+        f= open("constants.py","rb")
+        await ctx.message.channel.send("Here you are",file = discord.File(f.name))
+        f.close()
 
+                
 # @_client.command()
 # async def register(ctx,arg1):
 #     if ctx.message.author.roles[-1] < _guild.get_role(params.GRUNT_ID):
@@ -1225,41 +1379,38 @@ async def refresh_ib_lobbies():
     async with _update_lobbies_lock:
         await update_ib_lobbies()
 
-async def lobbies_on_reaction_add(reaction, user):
-    if user.bot or (reaction.emoji != BELL_EMOJI and reaction.emoji != NOBELL_EMOJI):
+async def lobbies_on_reaction_add(channel_id, message_id, emoji, member):
+    if member.bot or not emoji.is_unicode_emoji() or (emoji.name != BELL_EMOJI and emoji.name != NOBELL_EMOJI):
         return
 
     match_lobby = False
     async with _update_lobbies_lock:
         for lobby in _open_lobbies:
-            message_id = lobby_get_message_id(lobby)
-            if reaction.message.id == message_id:
+            lobby_message_id = lobby_get_message_id(lobby)
+            if lobby_message_id == message_id:
                 match_lobby = True
                 updated = False
-                if reaction.emoji == BELL_EMOJI and user not in lobby.subscribers:
-                    logging.info("User {} subbed to lobby {}".format(user.display_name, lobby))
-                    lobby.subscribers.append(user)
+                if emoji.name == BELL_EMOJI and member not in lobby.subscribers:
+                    logging.info("User {} subbed to lobby {}".format(member.display_name, lobby))
+                    lobby.subscribers.append(member)
                     updated = True
-                if reaction.emoji == NOBELL_EMOJI and user in lobby.subscribers:
-                    logging.info("User {} unsubbed from lobby {}".format(user.display_name, lobby))
-                    lobby.subscribers.remove(user)
+                if emoji.name == NOBELL_EMOJI and member in lobby.subscribers:
+                    logging.info("User {} unsubbed from lobby {}".format(member.display_name, lobby))
+                    lobby.subscribers.remove(member)
                     updated = True
 
                 if updated:
                     await lobby_update_message(lobby)
 
     if match_lobby:
-        await ensure_display(reaction.remove, user)
+        await ensure_display(remove_reaction, channel_id, message_id, emoji, member)
 
 # ==== MAIN ========================================================================================
 
 @_client.event
-async def on_reaction_add(reaction, user):
-    await asyncio.gather(
-        okib_on_reaction_add(reaction, user),
-        lobbies_on_reaction_add(reaction, user),
-        return_exceptions=True
-    )
+async def on_raw_reaction_add(payload):
+    await okib_on_reaction_add(payload.channel_id, payload.message_id, payload.emoji, payload.member)
+    await lobbies_on_reaction_add(payload.channel_id, payload.message_id, payload.emoji, payload.member)
 
 if __name__ == "__main__":
     logs_dir = os.path.join(ROOT_DIR, "logs")
@@ -1277,4 +1428,4 @@ if __name__ == "__main__":
     logging.getLogger().addHandler(logging.StreamHandler(sys.stdout))
 
     refresh_ib_lobbies.start()
-    _client.run(params.BOT_TOKEN)
+    _client.run(BOT_TOKEN)
