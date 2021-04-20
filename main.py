@@ -1357,15 +1357,8 @@ async def lobbies_on_reaction_add(channel_id, message_id, emoji, member):
 
 @_client.event
 async def on_raw_reaction_add(payload):
-    await asyncio.gather(
-        okib_on_reaction_add(
-            payload.channel_id, payload.message_id, payload.emoji, payload.member
-        ),
-        lobbies_on_reaction_add(
-            payload.channel_id, payload.message_id, payload.emoji, payload.member
-        ),
-        return_exceptions=True
-    )
+    await okib_on_reaction_add(payload.channel_id, payload.message_id, payload.emoji, payload.member)
+    await lobbies_on_reaction_add(payload.channel_id, payload.message_id, payload.emoji, payload.member)
 
 if __name__ == "__main__":
     logs_dir = os.path.join(ROOT_DIR, "logs")
