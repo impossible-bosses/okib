@@ -22,6 +22,30 @@ from replays import ReplayData, replays_load_emojis
 
 ROOT_DIR = os.path.dirname(os.path.realpath(__file__))
 
+
+#PARAMS AND CONSTANTS LOAD
+#PARAMS
+BOT_ID = params.BOT_ID
+BOT_TOKEN = params.BOT_TOKEN
+REBOOT_ON_UPDATE = params.REBOOT_ON_UPDATE
+
+#CONSTANTS
+try:
+    import constants
+    GUILD_NAME = constants.GUILD_NAME
+    COM_GUILD_ID = constants.COM_GUILD_ID
+    COM_CHANNEL_ID = constants.COM_CHANNEL_ID
+    PUB_HOST_ID = constants.PUB_HOST_ID
+    PEON_ID = constants.PEON_ID
+    SHAMAN_ID = constants.SHAMAN_ID  
+except Exception:
+    GUILD_NAME = params.GUILD_NAME
+    COM_GUILD_ID = params.COM_GUILD_ID
+    COM_CHANNEL_ID = params.COM_CHANNEL_ID
+    PUB_HOST_ID = params.PUB_HOST_ID
+    PEON_ID = params.PEON_ID
+    SHAMAN_ID = params.SHAMAN_ID
+
 def get_source_version():
     repo = git.Repo(ROOT_DIR)
     head_commit_sha = repo.head.commit.binsha
@@ -149,7 +173,7 @@ async def com(to_id, message_type, message = "", file = None):
     assert isinstance(message, str)
 
     payload = "/".join([
-        str(params.BOT_ID),
+        str(BOT_ID),
         str(to_id),
         message_type.value,
         message
@@ -270,13 +294,15 @@ def update_source_and_reset():
             logging.info("New version: {}".format(new_version))
             if new_version <= VERSION:
                 logging.error("Attempted to update, but version didn't upgrade ({} to {})".format(VERSION, new_version))
-
-            if params.REBOOT_ON_UPDATE:
-                logging.info("Rebooting")
-                os.system("sudo shutdown -r now")
-            else:
-                logging.info("Exiting")
-                exit()
+            reboot()
+            
+def reboot():
+    if REBOOT_ON_UPDATE:
+        logging.info("Rebooting")
+        os.system("sudo shutdown -r now")
+    else:
+        logging.info("Exiting")
+        exit()
 
 def parse_ensure_display_value(message):
     kv = message.split("=")
@@ -328,7 +354,7 @@ async def parse_bot_com(from_id, message_type, message, attachment):
         if message[-1] == "+":
             logging.info("Received connect ack from master instance {}".format(from_id))
             message_trim = message[:-1]
-            _alive_instances.add(params.BOT_ID)
+            _alive_instances.add(BOT_ID)
             _master_instance = from_id
             for callback in _callbacks: # clear init's self_promote callback
                 callback.cancel()
@@ -380,10 +406,10 @@ async def self_promote():
 
     _initialized = True
     _im_master = True
-    _master_instance = params.BOT_ID
+    _master_instance = BOT_ID
     # Needed for initialization. Alternatively, can use function arg (what archi was doing)
-    if params.BOT_ID not in _alive_instances:
-        _alive_instances.add(params.BOT_ID)
+    if BOT_ID not in _alive_instances:
+        _alive_instances.add(BOT_ID)
     await com(-1, MessageType.LET_MASTER)
     logging.info("I'm in charge!")
 
@@ -413,7 +439,7 @@ async def ensure_display_backup(func, *args, window=2, return_name=None, **kwarg
             _alive_instances.remove(_master_instance)
             _master_instance = None
 
-        if max(_alive_instances) == params.BOT_ID:
+        if max(_alive_instances) == BOT_ID:
             await self_promote()
 
         _is_master_timeout = False
@@ -466,7 +492,7 @@ async def update(ctx, bot_id):  # TODO default bot_id=None ??
     global _alive_instances
 
     bot_id = int(bot_id)
-    if bot_id == params.BOT_ID:
+    if bot_id == BOT_ID:
         # No ensure_display here because this isn't a distributed action
         await ctx.channel.send("Updating code and restarting...")
         update_source_and_reset()
@@ -478,7 +504,7 @@ async def update(ctx, bot_id):  # TODO default bot_id=None ??
 
         if _master_instance == bot_id:
             _master_instance = None
-            if max(_alive_instances) == params.BOT_ID:
+            if max(_alive_instances) == BOT_ID:
                 await self_promote()
 
 @_client.event
@@ -503,13 +529,13 @@ async def on_ready():
     guild_ib = None
     guild_com = None
     for guild in _client.guilds:
-        if guild.name == params.GUILD_NAME:
+        if guild.name == GUILD_NAME:
             guild_ib = guild
-        if guild.id == params.COM_GUILD_ID:
+        if guild.id == COM_GUILD_ID:
             guild_com = guild
 
     if guild_ib is None:
-        raise Exception("IB guild not found: \"{}\"".format(params.GUILD_NAME))
+        raise Exception("IB guild not found: \"{}\"".format(GUILD_NAME))
     if guild_com is None:
         raise Exception("Com virtual guild not found")
 
@@ -527,7 +553,7 @@ async def on_ready():
 
     channel_com = None
     for channel in guild_com.text_channels:
-        if channel.id == params.COM_CHANNEL_ID:
+        if channel.id == COM_CHANNEL_ID:
             channel_com = channel
     if channel_com is None:
         raise Exception("Com channel not found")
@@ -564,7 +590,7 @@ async def on_message(message):
         to_id = int(message_split[1])
         message_type = MessageType(message_split[2])
         content = message_split[3]
-        if from_id != params.BOT_ID and (to_id == -1 or to_id == params.BOT_ID):
+        if from_id != BOT_ID and (to_id == -1 or to_id == BOT_ID):
             # from another bot instance
             logging.info("Communication received from {} to {}, {}, content = {}".format(from_id, to_id, message_type, content))
 
@@ -685,14 +711,14 @@ async def okib(ctx, arg=None):
     adv = False
     #PUB OKIB
     if ctx.channel ==  _bnet_channel:
-        if ctx.message.author.roles[-1] < _guild.get_role(params.PUB_HOST_ID):
+        if ctx.message.author.roles[-1] < _guild.get_role(PUB_HOST_ID):
             await ensure_display(ctx.channel.send, NO_POWER_MSG)
             return
     #/PUB OKIB
-    elif ctx.message.author.roles[-1] <= _guild.get_role(params.PEON_ID):
+    elif ctx.message.author.roles[-1] <= _guild.get_role(PEON_ID):
         await ensure_display(ctx.channel.send, NO_POWER_MSG)
         return
-    if ctx.message.author.roles[-1] >= _guild.get_role(params.SHAMAN_ID) or ctx.message.author == _gatherer:
+    if ctx.message.author.roles[-1] >= _guild.get_role(SHAMAN_ID) or ctx.message.author == _gatherer:
         adv = True
     if adv == False and arg != None:
         await ensure_display(ctx.channel.send, NO_POWER_MSG)
@@ -776,13 +802,13 @@ async def noib(ctx):
     global _okib_message_id
     
     #PUB OKIB
-    if ctx.channel ==  _bnet_channel and ctx.message.author.roles[-1] >= _guild.get_role(params.PUB_HOST_ID):
+    if ctx.channel ==  _bnet_channel and ctx.message.author.roles[-1] >= _guild.get_role(PUB_HOST_ID):
         pass
     #/PUB OKIB
-    elif ctx.message.author.roles[-1] <= _guild.get_role(params.PEON_ID):
+    elif ctx.message.author.roles[-1] <= _guild.get_role(PEON_ID):
         await ensure_display(ctx.channel.send, NO_POWER_MSG)
         return
-    if ctx.message.author.roles[-1] < _guild.get_role(params.SHAMAN_ID) and ctx.message.author != _gatherer:
+    if ctx.message.author.roles[-1] < _guild.get_role(SHAMAN_ID) and ctx.message.author != _gatherer:
         if datetime.datetime.now() < (_gather_time + datetime.timedelta(hours=2)):
             await ensure_display(ctx.channel.send, NO_POWER_MSG)
             return
@@ -828,7 +854,7 @@ async def okib_on_reaction_add(channel_id, message_id, emoji, member):
     
     if message_id == _okib_message_id and member.bot == False:
         modify = False 
-        if member.roles[-1] >= _guild.get_role(params.PEON_ID) or _okib_channel == _bnet_channel:
+        if member.roles[-1] >= _guild.get_role(PEON_ID) or _okib_channel == _bnet_channel:
             try:
                 if emoji == _okib_emote:
                     if member not in _okib_members:
@@ -913,33 +939,33 @@ async def shaman_promote(member):
 async def on_member_update(before, after):
     if before.guild == _guild:
         #promoted
-        if before.roles[-1] < _guild.get_role(params.PUB_HOST_ID) and after.roles[-1] == _guild.get_role(params.PUB_HOST_ID):
+        if before.roles[-1] < _guild.get_role(PUB_HOST_ID) and after.roles[-1] == _guild.get_role(PUB_HOST_ID):
             await pub_host_promote(after)
             
-        if before.roles[-1] < _guild.get_role(params.SHAMAN_ID) and before.roles[-1] > _guild.get_role(params.PEON_ID):
+        if before.roles[-1] < _guild.get_role(SHAMAN_ID) and before.roles[-1] > _guild.get_role(PEON_ID):
             #was grunt
-            if after.roles[-1] >= _guild.get_role(params.SHAMAN_ID):
+            if after.roles[-1] >= _guild.get_role(SHAMAN_ID):
                 #promoted to shaman
                 await shaman_promote(after)
-        elif before.roles[-1] == _guild.get_role(params.PEON_ID):
+        elif before.roles[-1] == _guild.get_role(PEON_ID):
             #was peon
-            if after.roles[-1] > _guild.get_role(params.PEON_ID) and after.roles[-1] < _guild.get_role(params.SHAMAN_ID):
+            if after.roles[-1] > _guild.get_role(PEON_ID) and after.roles[-1] < _guild.get_role(SHAMAN_ID):
                 #promoted to grunt
                 await grunt_promote(after)
-            elif after.roles[-1] >= _guild.get_role(params.SHAMAN_ID):
+            elif after.roles[-1] >= _guild.get_role(SHAMAN_ID):
                 #promoted to shaman
                 await grunt_promote(after)
                 await shaman_promote(after)
-        elif before.roles[-1] < _guild.get_role(params.PEON_ID):
+        elif before.roles[-1] < _guild.get_role(PEON_ID):
             #was nothing
-            if after.roles[-1] == _guild.get_role(params.PEON_ID):
+            if after.roles[-1] == _guild.get_role(PEON_ID):
                 #promoted to peon3
                 await peon_promote(after)
-            elif after.roles[-1] > _guild.get_role(params.PEON_ID) and after.roles[-1] < _guild.get_role(params.SHAMAN_ID):
+            elif after.roles[-1] > _guild.get_role(PEON_ID) and after.roles[-1] < _guild.get_role(SHAMAN_ID):
                 #promoted to grunt
                 await peon_promote(after)
                 await grunt_promote(after)
-            elif after.roles[-1] >= _guild.get_role(params.SHAMAN_ID):
+            elif after.roles[-1] >= _guild.get_role(SHAMAN_ID):
                 #promoted to shaman
                 await peon_promote(after)
                 await grunt_promote(after)
@@ -954,7 +980,7 @@ def nonquery(query):
 
 @_client.command()
 async def warn(ctx, arg1, *, arg2=""):
-    if ctx.message.author.roles[-1] < _guild.get_role(params.SHAMAN_ID):
+    if ctx.message.author.roles[-1] < _guild.get_role(SHAMAN_ID):
         await ensure_display(ctx.channel.send, NO_POWER_MSG)
         return
 
@@ -965,7 +991,7 @@ async def warn(ctx, arg1, *, arg2=""):
         
 @_client.command()
 async def pedigree(ctx):
-    if ctx.message.author.roles[-1] < _guild.get_role(params.PEON_ID):
+    if ctx.message.author.roles[-1] < _guild.get_role(PEON_ID):
         await ensure_display(ctx.channel.send, NO_POWER_MSG)
         return
 
@@ -1053,7 +1079,33 @@ async def sub2(ctx, arg1):
         await ctx.message.author.add_roles(_KR_role)
         await ctx.message.channel.send("KR has been succesfully added in your roles")
 
+@_client.command()
+async def update_constants(ctx):
+    if ctx.message.author.roles[-1] < _guild.get_role(SHAMAN_ID):
+        return
+    else:
+        if len(ctx.message.attachments) > 0:
+            try:
+                B = await ctx.message.attachments[0].read()
+            except Exception:
+                await ctx.message.channel.send(sys.exc_info())
+                return
+            f = open("constants.py","wb")
+            f.write(B)
+            f.close()
+            await ctx.message.channel.send("file updated, now rebooting")
+            reboot()
+            
+@_client.command()
+async def get_constants(ctx):
+    if ctx.message.author.roles[-1] < _guild.get_role(SHAMAN_ID):
+        return
+    else:
+        f= open("constants.py","rb")
+        await ctx.message.channel.send("Here you are",file = discord.File(f.name))
+        f.close()
 
+                
 # @_client.command()
 # async def register(ctx,arg1):
 #     if ctx.message.author.roles[-1] < _guild.get_role(params.GRUNT_ID):
@@ -1376,4 +1428,4 @@ if __name__ == "__main__":
     logging.getLogger().addHandler(logging.StreamHandler(sys.stdout))
 
     refresh_ib_lobbies.start()
-    _client.run(params.BOT_TOKEN)
+    _client.run(BOT_TOKEN)
