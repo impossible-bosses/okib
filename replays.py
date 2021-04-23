@@ -186,7 +186,7 @@ class ReplayData:
         players_str = ""
         for player in self.players:
             players_str += "{} {}\n".format(_class_emoji[player.class_], player.name)
-        url = "https://wc3stats.com/games/{}".format(self.id)
+        url = "https://impossible-bosses.github.io/ibstats/game/?id={}".format(self.id)
 
         embed = discord.Embed(title=title, description=players_str, url=url)
         embed.set_footer(text=self.map)
