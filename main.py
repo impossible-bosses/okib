@@ -1012,7 +1012,7 @@ async def pedigree(ctx):
 # ==== MISC ========================================================================================
 
 async def check_replay(message):
-    ENSURE_DISPLAY_WINDOW = 30
+    ENSURE_DISPLAY_WINDOW = 60
 
     if len(message.attachments) == 0:
         return
