@@ -18,7 +18,7 @@ import sys
 import traceback
 
 from lobbies import Lobby, BELL_EMOJI, NOBELL_EMOJI
-from replays import ReplayData, replays_load_emojis
+from replays import ReplayData, replays_load_emojis, replay_id_to_url
 
 ROOT_DIR = os.path.dirname(os.path.realpath(__file__))
 
@@ -1036,13 +1036,13 @@ async def check_replay(message):
 
         response_json = await response.json()
         replay_id = response_json["body"]["id"]
-        fallback_message = "Uploaded replay `{}` => https://wc3stats.com/games/{}".format(att.filename, replay_id)
+        fallback_message = "Uploaded replay `{}` => {}".format(att.filename, replay_id_to_url(replay_id))
         try:
             replay_data = ReplayData(response_json)
         except Exception as e:
             logging.error("Failed to parse replay data, id {}".format(replay_id))
             traceback.print_exc()
-            await ensure_display(message.channel.send, fallback_message, window=ENSURE_DISPLAY_WINDOW)
+            await ensure_display(message.channel.send, content=fallback_message, embed=None, window=ENSURE_DISPLAY_WINDOW)
             return
 
         content = "Uploaded replay `{}`:".format(att.filename)

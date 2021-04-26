@@ -64,6 +64,9 @@ def difficulty_to_short_string(d):
     if d == Difficulty.H:
         return "H"
 
+def replay_id_to_url(replay_id):
+    return "https://impossible-bosses.github.io/ibstats/game/?id={}".format(replay_id)
+
 class PlayerStats:
     def __init__(self, json):
         self.deaths = json["deaths"]
@@ -186,9 +189,8 @@ class ReplayData:
         players_str = ""
         for player in self.players:
             players_str += "{} {}\n".format(_class_emoji[player.class_], player.name)
-        url = "https://impossible-bosses.github.io/ibstats/game/?id={}".format(self.id)
 
-        embed = discord.Embed(title=title, description=players_str, url=url)
+        embed = discord.Embed(title=title, description=players_str, url=replay_id_to_url(self.id))
         embed.set_footer(text=self.map)
         return embed
 
