@@ -153,6 +153,7 @@ _is_master_timeout = True
 _open_lobbies = []
 _ent_down_tries = 0
 _wc3stats_down_tries = 0
+_log_file_path = None
 
 class TimedCallback:
     def __init__(self, t, func, *args, **kwargs):
@@ -748,6 +749,7 @@ async def okib(ctx, arg=None):
         else:
             _gathered = False
             _okib_members = []
+            _laterib_members = []
             _noib_members = []
             for user in ctx.message.mentions:
                 if user not in _okib_members:
@@ -1101,8 +1103,17 @@ async def get_constants(ctx):
     if ctx.message.author.roles[-1] < _guild.get_role(SHAMAN_ID):
         return
     else:
-        f= open("constants.py","rb")
-        await ctx.message.channel.send("Here you are",file = discord.File(f.name))
+        f = open("constants.py", "rb")
+        await ctx.message.channel.send("Here you are", file=discord.File(f.name))
+        f.close()
+            
+@_client.command()
+async def get_logs(ctx):
+    if ctx.message.author.roles[-1] < _guild.get_role(SHAMAN_ID):
+        return
+    else:
+        f = open(_log_file_path, "rb")
+        await ctx.message.channel.send("Here you are", file=discord.File(f.name))
         f.close()
 
                 
@@ -1418,11 +1429,11 @@ if __name__ == "__main__":
         os.makedirs(logs_dir)
 
     datetime_now = datetime.datetime.now()
-    log_file_path = os.path.join(logs_dir, "v{}.{}.log".format(VERSION, datetime_now.strftime("%Y%m%d_%H%M%S")))
-    print("Log file: {}".format(log_file_path))
+    _log_file_path = os.path.join(logs_dir, "v{}.{}.log".format(VERSION, datetime_now.strftime("%Y%m%d_%H%M%S")))
+    print("Log file: {}".format(_log_file_path))
 
     logging.basicConfig(
-        filename=log_file_path, level=logging.INFO,
+        filename=_log_file_path, level=logging.INFO,
         format="%(asctime)s %(levelname)s: %(message)s", datefmt="%Y-%m-%d %H:%M:%S"
     )
     logging.getLogger().addHandler(logging.StreamHandler(sys.stdout))
