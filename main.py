@@ -21,7 +21,8 @@ from lobbies import Lobby, BELL_EMOJI, NOBELL_EMOJI
 from replays import ReplayData, replays_load_emojis, replay_id_to_url
 
 ROOT_DIR = os.path.dirname(os.path.realpath(__file__))
-
+LOGS_DIR = os.path.join(ROOT_DIR, "logs")
+LOG_FILE_TIMESTAMP_FORMAT = "%Y%m%d_%H%M%S"
 
 #PARAMS AND CONSTANTS LOAD
 #PARAMS
@@ -748,6 +749,7 @@ async def okib(ctx, arg=None):
         else:
             _gathered = False
             _okib_members = []
+            _laterib_members = []
             _noib_members = []
             for user in ctx.message.mentions:
                 if user not in _okib_members:
@@ -1101,11 +1103,67 @@ async def get_constants(ctx):
     if ctx.message.author.roles[-1] < _guild.get_role(SHAMAN_ID):
         return
     else:
-        f= open("constants.py","rb")
-        await ctx.message.channel.send("Here you are",file = discord.File(f.name))
+        f = open("constants.py", "rb")
+        await ctx.message.channel.send("Here you are", file=discord.File(f.name))
         f.close()
+            
+@_client.command()
+async def get_logs(ctx, arg=None):
+    if ctx.message.author.roles[-1] < _guild.get_role(SHAMAN_ID):
+        return
 
-                
+    logging.info("get_logs arg={}".format(arg))
+    arg_timestamp = None
+    if arg is not None:
+        try:
+            arg_timestamp = datetime.datetime.strptime(arg, LOG_FILE_TIMESTAMP_FORMAT)
+        except ValueError as e:
+            logging.error(e)
+            await ctx.message.channel.send("Invalid timestamp: {}".format(arg))
+            return
+
+    log_file_timestamps = []
+    for log_file in os.listdir(LOGS_DIR):
+        try:
+            dot_index = log_file.index(".")
+        except ValueError as e:
+            logging.error("log file {} index error {}".format(log_file, e))
+            continue
+        timestamp_str = log_file[dot_index+1:-4]
+        try:
+            timestamp = datetime.datetime.strptime(timestamp_str, LOG_FILE_TIMESTAMP_FORMAT)
+        except ValueError as e:
+            logging.error("log file {} strptime error {}".format(log_file, e))
+            continue
+        log_file_timestamps.append({
+            "timestamp": timestamp,
+            "file": log_file
+        })
+
+    if len(log_file_timestamps) == 0:
+        await ctx.message.channel.send("No log files found")
+        return
+
+    log_file_timestamps.sort(key=lambda v: v["timestamp"])
+    to_return = None
+    if arg_timestamp is None:
+        to_return = log_file_timestamps[-1]
+    else:
+        for log_file_timestamp in log_file_timestamps:
+            if arg_timestamp >= log_file_timestamp["timestamp"]:
+                to_return = log_file_timestamp
+            else:
+                break
+
+    if to_return is None:
+        await ctx.message.channel.send("No log files for {}".format(arg))
+        return
+
+    full_path = os.path.join(LOGS_DIR, to_return["file"])
+    logging.info("responding with log file {}".format(full_path))
+    with open(full_path) as f:
+        await ctx.message.channel.send("Here you are", file=discord.File(f.name))
+
 # @_client.command()
 # async def register(ctx,arg1):
 #     if ctx.message.author.roles[-1] < _guild.get_role(params.GRUNT_ID):
@@ -1413,12 +1471,11 @@ async def on_raw_reaction_add(payload):
     await lobbies_on_reaction_add(payload.channel_id, payload.message_id, payload.emoji, payload.member)
 
 if __name__ == "__main__":
-    logs_dir = os.path.join(ROOT_DIR, "logs")
-    if not os.path.exists(logs_dir):
-        os.makedirs(logs_dir)
+    if not os.path.exists(LOGS_DIR):
+        os.makedirs(LOGS_DIR)
 
     datetime_now = datetime.datetime.now()
-    log_file_path = os.path.join(logs_dir, "v{}.{}.log".format(VERSION, datetime_now.strftime("%Y%m%d_%H%M%S")))
+    log_file_path = os.path.join(LOGS_DIR, "v{}.{}.log".format(VERSION, datetime_now.strftime(LOG_FILE_TIMESTAMP_FORMAT)))
     print("Log file: {}".format(log_file_path))
 
     logging.basicConfig(
