@@ -1108,16 +1108,19 @@ async def get_constants(ctx):
         f.close()
             
 @_client.command()
-async def get_logs(ctx, arg1):
+async def get_logs(ctx, arg=None):
     if ctx.message.author.roles[-1] < _guild.get_role(SHAMAN_ID):
         return
 
-    try:
-        arg_timestamp = datetime.datetime.strptime(arg1, LOG_FILE_TIMESTAMP_FORMAT)
-    except ValueError as e:
-        logging.error(e)
-        await ctx.message.channel.send("Invalid timestamp: {}".format(arg1))
-        return
+    logging.info("get_logs arg={}".format(arg))
+    arg_timestamp = None
+    if arg is not None:
+        try:
+            arg_timestamp = datetime.datetime.strptime(arg, LOG_FILE_TIMESTAMP_FORMAT)
+        except ValueError as e:
+            logging.error(e)
+            await ctx.message.channel.send("Invalid timestamp: {}".format(arg))
+            return
 
     log_file_timestamps = []
     for log_file in os.listdir(LOGS_DIR):
@@ -1142,11 +1145,17 @@ async def get_logs(ctx, arg1):
         return
 
     log_file_timestamps.sort(key=lambda v: v["timestamp"])
-    to_return = log_file_timestamps[-1]
-    for log_file_timestamp in log_file_timestamps:
-        if arg_timestamp < log_file_timestamp["timestamp"]:
-            to_return = log_file_timestamp
-            break
+    to_return = None
+    if arg_timestamp is not None:
+        for log_file_timestamp in log_file_timestamps:
+            if arg_timestamp >= log_file_timestamp["timestamp"]:
+                to_return = log_file_timestamp
+            else:
+                break
+
+    if to_return is None:
+        await ctx.message.channel.send("No log files for {}".format(arg))
+        return
 
     full_path = os.path.join(LOGS_DIR, to_return["file"])
     logging.info("responding with log file {}".format(full_path))
