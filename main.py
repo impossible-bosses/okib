@@ -1146,7 +1146,9 @@ async def get_logs(ctx, arg=None):
 
     log_file_timestamps.sort(key=lambda v: v["timestamp"])
     to_return = None
-    if arg_timestamp is not None:
+    if arg_timestamp is None:
+        to_return = log_file_timestamps[-1]
+    else:
         for log_file_timestamp in log_file_timestamps:
             if arg_timestamp >= log_file_timestamp["timestamp"]:
                 to_return = log_file_timestamp
