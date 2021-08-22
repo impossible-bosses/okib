@@ -125,6 +125,7 @@ class MessageHub:
 # constants
 DB_FILE_PATH = os.path.join(ROOT_DIR, "IBCE_WARN.db")
 DB_ARCHIVE_PATH = os.path.join(ROOT_DIR, "archive", "IBCE_WARN.db")
+CONSTANTS_PATH = os.path.join(ROOT_DIR, "constants.py")
 VERSION = get_source_version()
 print("Source version {}".format(VERSION))
 
@@ -1092,7 +1093,7 @@ async def update_constants(ctx):
             except Exception:
                 await ctx.message.channel.send(sys.exc_info())
                 return
-            f = open("constants.py","wb")
+            f = open(CONSTANTS_PATH, "wb")
             f.write(B)
             f.close()
             await ctx.message.channel.send("file updated, now rebooting")
@@ -1103,7 +1104,7 @@ async def get_constants(ctx):
     if ctx.message.author.roles[-1] < _guild.get_role(SHAMAN_ID):
         return
     else:
-        f = open("constants.py", "rb")
+        f = open(CONSTANTS_PATH, "rb")
         await ctx.message.channel.send("Here you are", file=discord.File(f.name))
         f.close()
             
