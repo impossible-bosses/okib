@@ -13,6 +13,14 @@ class MapVersion:
         self.slots = slots
 
 KNOWN_VERSIONS = [
+    MapVersion("Impossible.Bosses.v1.11.20"),
+    MapVersion("Impossible.Bosses.v1.11.20-no-bnet", ent_only=True),
+    MapVersion("Impossible.Bosses.v1.11.9", deprecated=True),
+    MapVersion("Impossible.Bosses.v1.11.9-no-bnet", ent_only=True, deprecated=True),
+    MapVersion("Impossible.Bosses.v1.11.8", deprecated=True),
+    MapVersion("Impossible.Bosses.v1.11.8-no-bnet", ent_only=True, deprecated=True),
+    MapVersion("Impossible.Bosses.v1.11.7", deprecated=True),
+    MapVersion("Impossible.Bosses.v1.11.7-no-bnet", ent_only=True, deprecated=True),
     MapVersion("Impossible.Bosses.v1.11.6"),
     MapVersion("Impossible.Bosses.v1.11.6-no-bnet", ent_only=True),
     MapVersion("Impossible.Bosses.v1.11.5-no-bnet", ent_only=True, deprecated=True),
