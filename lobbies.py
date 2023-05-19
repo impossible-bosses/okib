@@ -161,7 +161,6 @@ class Lobby:
         if version is not None:
             if not self.is_ent:
                 # Not sure why, but IB bnet lobbies have 1 extra slot
-                slots_taken -= 1
                 slots_total -= 1
 
             if slots_total not in version.slots:
