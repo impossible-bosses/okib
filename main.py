@@ -297,7 +297,7 @@ def update_source_and_reset():
             if new_version <= VERSION:
                 logging.error("Attempted to update, but version didn't upgrade ({} to {})".format(VERSION, new_version))
             reboot()
-            
+
 def reboot():
     if REBOOT_ON_UPDATE:
         logging.info("Rebooting")
@@ -527,7 +527,7 @@ async def on_ready():
 
     BNET_CHANNEL_NAME = "pub-games"
     ENT_CHANNEL_NAME = "general-chat"
-    
+
     guild_ib = None
     guild_com = None
     for guild in _client.guilds:
@@ -648,15 +648,14 @@ async def gather():
             #Should be an logging.error there but since this might happen quite frequently i dont want it to show as "abnormal"
             logging.warning("Error sending DM to {}, {}".format(member.name, e))
             traceback.print_exc()
-        
 
 async def combinator3000(*args):
     for f in args:
         await f()
-        
+
 async def list_update():
     global _list_content
-    
+
     okib_list_string = ", ".join([member.display_name for member in _okib_members])
     noib_list_string = ", ".join([member.display_name for member in _noib_members])
     _list_content = "{} asks : {}\n{} {}/{} : {}\n{} : {}".format(
@@ -675,7 +674,7 @@ async def check_almost_gather():
                 #Should be an logging.error there but since this might happen quite frequently i dont want it to show as "abnormal"
                 logging.warning("Error sending DM to {}, {}".format(member.name, e))
                 traceback.print_exc()
-            
+
 def gather_check():
     global _gathered
     if len(_okib_members) >= OKIB_GATHER_PLAYERS and not _gathered:
@@ -686,7 +685,7 @@ def gather_check():
 
 async def up(ctx):
     global _okib_message_id
-    
+
     if _okib_message_id is not None:
         message = await _okib_channel.fetch_message(_okib_message_id)
         await message.delete()
@@ -698,7 +697,7 @@ async def up(ctx):
     await ctx.message.delete()
     _okib_message_id = okib_message.id
     return _okib_message_id
-    
+
 @_client.command()
 async def okib(ctx, arg=None):
     global _okib_channel
@@ -717,7 +716,7 @@ async def okib(ctx, arg=None):
             await ensure_display(ctx.channel.send, NO_POWER_MSG)
             return
     #/PUB OKIB
-    elif ctx.message.author.roles[-1] <= _guild.get_role(PEON_ID):
+    elif ctx.message.author.roles[-1] < _guild.get_role(PEON_ID):
         await ensure_display(ctx.channel.send, NO_POWER_MSG)
         return
     if ctx.message.author.roles[-1] >= _guild.get_role(SHAMAN_ID) or ctx.message.author == _gatherer:
@@ -725,11 +724,11 @@ async def okib(ctx, arg=None):
     if adv == False and arg != None:
         await ensure_display(ctx.channel.send, NO_POWER_MSG)
         return
-    
+
     if  _okib_channel is not None and _okib_channel != ctx.channel:
         await ensure_display(ctx.channel.send, "gathering is already in progress in channel " + _okib_channel.mention)
         return
-    
+
     modify = False
     for user in ctx.message.mentions:
         if user not in _okib_members:
@@ -740,7 +739,7 @@ async def okib(ctx, arg=None):
             modify = True
         if user in _laterib_members:
             _laterib_members.remove(user)
-    
+
     if _okib_channel is None:
         _gatherer = ctx.message.author
         _gather_time = datetime.datetime.now()
@@ -764,10 +763,9 @@ async def okib(ctx, arg=None):
         await list_update()
         await ensure_display(up, ctx, return_name="_okib_message_id")
         modify = False
-
     elif arg == None:
         await ensure_display(up, ctx, return_name="_okib_message_id")
-            
+
     if arg == 'retrieve':
         await list_update()
         gather_check()
@@ -803,12 +801,12 @@ async def noib(ctx):
     global _noib_members
     global _okib_channel
     global _okib_message_id
-    
+
     #PUB OKIB
     if ctx.channel ==  _bnet_channel and ctx.message.author.roles[-1] >= _guild.get_role(PUB_HOST_ID):
         pass
     #/PUB OKIB
-    elif ctx.message.author.roles[-1] <= _guild.get_role(PEON_ID):
+    elif ctx.message.author.roles[-1] < _guild.get_role(PEON_ID):
         await ensure_display(ctx.channel.send, NO_POWER_MSG)
         return
     if ctx.message.author.roles[-1] < _guild.get_role(SHAMAN_ID) and ctx.message.author != _gatherer:
@@ -826,7 +824,7 @@ async def noib(ctx):
             ))
         _okib_message_id = None
         _okib_channel = None
-        
+
     modify = False
     for user in ctx.message.mentions:
         if user not in _noib_members:
@@ -837,7 +835,7 @@ async def noib(ctx):
             modify = True
         if user in _laterib_members:
             _laterib_members.remove(user)
-            
+
     if modify:
         await list_update()
         gather_check()
@@ -848,13 +846,13 @@ async def noib(ctx):
                 (await _okib_channel.fetch_message(_okib_message_id)).edit,
                 content=_list_content)
         ))
-        
+
 async def okib_on_reaction_add(channel_id, message_id, emoji, member):
     global _okib_members
     global _laterib_members
     global _noib_members
     global _gathered
-    
+
     if message_id == _okib_message_id and member.bot == False:
         modify = False 
         if member.roles[-1] >= _guild.get_role(PEON_ID) or _okib_channel == _bnet_channel:
@@ -878,7 +876,6 @@ async def okib_on_reaction_add(channel_id, message_id, emoji, member):
                         modify = True
                     if member in _laterib_members:
                         _laterib_members.remove(member)
-                
                 elif emoji == _laterib_emote:
                     if member not in _laterib_members:
                         _laterib_members.append(member)
@@ -888,11 +885,10 @@ async def okib_on_reaction_add(channel_id, message_id, emoji, member):
                     if member in _okib_members:
                         _okib_members.remove(member)
                         modify = True
-                
             except AttributeError as e:
                 traceback.print_exc()
                 pass
-            
+
             if modify:
                 await list_update()
                 #remove&edit
@@ -922,57 +918,56 @@ async def okib_on_reaction_add(channel_id, message_id, emoji, member):
         await ensure_display(remove_reaction, channel_id, message_id, emoji, member)
 
 
-async def pub_host_promote(member):
-    channel = await member.create_dm()
-    await ensure_display(channel.send, "Congratulation on being promoted to pub host !\nYou are now able to start a gather for IB games on the pub-games channel. To do so, use !okib command to start it, and !noib command to end/cancel it. Others have to answer with the :okib: and the :noib: reactions. Now you can get an idea of who in the discord is up to play a game without having to guess which players will come back, and discord members can express their interest in playing without needing to leave a message which may not be seen. By starting a gather, you're confirming you can host the game when it reach 8 players, within 20 mins. You'll get notified when it reaches 8 players.")
+# async def pub_host_promote(member):
+#     channel = await member.create_dm()
+#     await ensure_display(channel.send, "Congratulation on being promoted to pub host !\nYou are now able to start a gather for IB games on the pub-games channel. To do so, use !okib command to start it, and !noib command to end/cancel it. Others have to answer with the :okib: and the :noib: reactions. Now you can get an idea of who in the discord is up to play a game without having to guess which players will come back, and discord members can express their interest in playing without needing to leave a message which may not be seen. By starting a gather, you're confirming you can host the game when it reach 8 players, within 20 mins. You'll get notified when it reaches 8 players.")
 
-async def peon_promote(member):
-    channel = await member.create_dm()
-    await ensure_display(channel.send, "Congratulation on being promoted to peon !\nYou are now able to register for official ENT games. To do so, you have to use the :okib: and the :noib: reactions when the clan is looking for ENT players. By declaring you up for a game, you're confirming you can join the game when it starts, within 20 mins. You'll get notified when we reach desired number of players and when the game is actually hosted.")
+# async def peon_promote(member):
+#     channel = await member.create_dm()
+#     await ensure_display(channel.send, "Congratulation on being promoted to peon !\nYou are now able to register for official ENT games. To do so, you have to use the :okib: and the :noib: reactions when the clan is looking for ENT players. By declaring you up for a game, you're confirming you can join the game when it starts, within 20 mins. You'll get notified when we reach desired number of players and when the game is actually hosted.")
 
-async def grunt_promote(member):
-    channel = await member.create_dm()
-    await ensure_display(channel.send, "Congratulation on being promoted to grunt !\nYou are now able to start your own gather with the !okib command in the #general channel. When you do so, you have access to the !noib command to cancel your gather, don't forget to cancel it before you leave, so you don't leave an old gather for the next bot user.\nYou can now cancel anyone's gather after at least 2 hours of the first !okib command.\nYou can also remove player from your gather with the !noib @player command. Use these rights wisely.")
+# async def grunt_promote(member):
+#     channel = await member.create_dm()
+#     await ensure_display(channel.send, "Congratulation on being promoted to grunt !\nYou are now able to start your own gather with the !okib command in the #general channel. When you do so, you have access to the !noib command to cancel your gather, don't forget to cancel it before you leave, so you don't leave an old gather for the next bot user.\nYou can now cancel anyone's gather after at least 2 hours of the first !okib command.\nYou can also remove player from your gather with the !noib @player command. Use these rights wisely.")
 
-async def shaman_promote(member):
-    channel = await member.create_dm()
-    await ensure_display(channel.send, "Congratulation on being promoted to shaman !\nYou have now full access to all commands of anyone's gather. This include manually adding players (by-passing peon rank requirement) with the !okib @player command and removing any player with the !noib @player command. You can cancel anyone's gather at any time with the basic !noib. Additionally, if you find that someone accidentally cancels a gather, retrieve old list of players with the !okib retrieve command, only if a new gather hasn't been started already.")
+# async def shaman_promote(member):
+#     channel = await member.create_dm()
+#     await ensure_display(channel.send, "Congratulation on being promoted to shaman !\nYou have now full access to all commands of anyone's gather. This include manually adding players (by-passing peon rank requirement) with the !okib @player command and removing any player with the !noib @player command. You can cancel anyone's gather at any time with the basic !noib. Additionally, if you find that someone accidentally cancels a gather, retrieve old list of players with the !okib retrieve command, only if a new gather hasn't been started already.")
 
-@_client.event
-async def on_member_update(before, after):
-    if before.guild == _guild:
-        #promoted
-        if before.roles[-1] < _guild.get_role(PUB_HOST_ID) and after.roles[-1] == _guild.get_role(PUB_HOST_ID):
-            await pub_host_promote(after)
-            
-        if before.roles[-1] < _guild.get_role(SHAMAN_ID) and before.roles[-1] > _guild.get_role(PEON_ID):
-            #was grunt
-            if after.roles[-1] >= _guild.get_role(SHAMAN_ID):
-                #promoted to shaman
-                await shaman_promote(after)
-        elif before.roles[-1] == _guild.get_role(PEON_ID):
-            #was peon
-            if after.roles[-1] > _guild.get_role(PEON_ID) and after.roles[-1] < _guild.get_role(SHAMAN_ID):
-                #promoted to grunt
-                await grunt_promote(after)
-            elif after.roles[-1] >= _guild.get_role(SHAMAN_ID):
-                #promoted to shaman
-                await grunt_promote(after)
-                await shaman_promote(after)
-        elif before.roles[-1] < _guild.get_role(PEON_ID):
-            #was nothing
-            if after.roles[-1] == _guild.get_role(PEON_ID):
-                #promoted to peon3
-                await peon_promote(after)
-            elif after.roles[-1] > _guild.get_role(PEON_ID) and after.roles[-1] < _guild.get_role(SHAMAN_ID):
-                #promoted to grunt
-                await peon_promote(after)
-                await grunt_promote(after)
-            elif after.roles[-1] >= _guild.get_role(SHAMAN_ID):
-                #promoted to shaman
-                await peon_promote(after)
-                await grunt_promote(after)
-                await shaman_promote(after)
+# @_client.event
+# async def on_member_update(before, after):
+#     if before.guild == _guild:
+#         #promoted
+#         if before.roles[-1] < _guild.get_role(PUB_HOST_ID) and after.roles[-1] == _guild.get_role(PUB_HOST_ID):
+#             await pub_host_promote(after)
+#         if before.roles[-1] < _guild.get_role(SHAMAN_ID) and before.roles[-1] > _guild.get_role(PEON_ID):
+#             #was grunt
+#             if after.roles[-1] >= _guild.get_role(SHAMAN_ID):
+#                 #promoted to shaman
+#                 await shaman_promote(after)
+#         elif before.roles[-1] == _guild.get_role(PEON_ID):
+#             #was peon
+#             if after.roles[-1] > _guild.get_role(PEON_ID) and after.roles[-1] < _guild.get_role(SHAMAN_ID):
+#                 #promoted to grunt
+#                 await grunt_promote(after)
+#             elif after.roles[-1] >= _guild.get_role(SHAMAN_ID):
+#                 #promoted to shaman
+#                 await grunt_promote(after)
+#                 await shaman_promote(after)
+#         elif before.roles[-1] < _guild.get_role(PEON_ID):
+#             #was nothing
+#             if after.roles[-1] == _guild.get_role(PEON_ID):
+#                 #promoted to peon3
+#                 await peon_promote(after)
+#             elif after.roles[-1] > _guild.get_role(PEON_ID) and after.roles[-1] < _guild.get_role(SHAMAN_ID):
+#                 #promoted to grunt
+#                 await peon_promote(after)
+#                 await grunt_promote(after)
+#             elif after.roles[-1] >= _guild.get_role(SHAMAN_ID):
+#                 #promoted to shaman
+#                 await peon_promote(after)
+#                 await grunt_promote(after)
+#                 await shaman_promote(after)
 
 def nonquery(query):
     conn = sqlite3.connect(DB_FILE_PATH)
@@ -991,7 +986,7 @@ async def warn(ctx, arg1, *, arg2=""):
         sqlquery = "INSERT INTO Events (Event_type,Player_id,Reason,Datetime,Warner) VALUES (666,{},\"{}\",\"{}\",\"{}\")".format(user.id, arg2, datetime.datetime.now(), ctx.message.author.display_name)
         nonquery(sqlquery)
         await ensure_display(ctx.channel.send, "User <@!{}> has been warned !".format(user.id))
-        
+
 @_client.command()
 async def pedigree(ctx):
     if ctx.message.author.roles[-1] < _guild.get_role(PEON_ID):
@@ -1055,7 +1050,7 @@ async def check_replay(message):
 @_client.command()
 async def unsub(ctx, arg1=None):
     await ensure_display(functools.partial(unsub2, ctx, arg1))
-    
+
 async def unsub2(ctx,arg1):
     if (arg1 == "EU" or arg1 == "eu"):
         await ctx.message.author.remove_roles(_EU_role)
@@ -1070,7 +1065,7 @@ async def unsub2(ctx,arg1):
 @_client.command()
 async def sub(ctx, arg1=None):
     await ensure_display(functools.partial(sub2, ctx, arg1))
-    
+
 async def sub2(ctx, arg1):
     if (arg1 == "EU" or arg1 == "eu"):
         await ctx.message.author.add_roles(_EU_role)
@@ -1098,7 +1093,7 @@ async def update_constants(ctx):
             f.close()
             await ctx.message.channel.send("file updated, now rebooting")
             reboot()
-            
+
 @_client.command()
 async def get_constants(ctx):
     if ctx.message.author.roles[-1] < _guild.get_role(SHAMAN_ID):
@@ -1107,7 +1102,7 @@ async def get_constants(ctx):
         f = open(CONSTANTS_PATH, "rb")
         await ctx.message.channel.send("Here you are", file=discord.File(f.name))
         f.close()
-            
+
 @_client.command()
 async def get_logs(ctx, arg=None):
     if ctx.message.author.roles[-1] < _guild.get_role(SHAMAN_ID):
