@@ -1413,7 +1413,6 @@ async def refresh_ib_lobbies():
     if not _initialized:
         return
 
-    print("lobby refresh")
     logging.debug("Refreshing lobby list")
     async with _update_lobbies_lock:
         await update_ib_lobbies()
