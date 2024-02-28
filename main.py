@@ -1,21 +1,19 @@
 import aiohttp
 import asyncio
 import datetime
-import discord
-from discord.ext.tasks import loop
-from discord.ext import commands
 from enum import Enum, unique
 import functools
-import git
 import io
-import json
 import logging
 import os
-import params
 import pickle
 import sqlite3
 import sys
 import traceback
+
+import discord
+from discord.ext import commands, tasks
+import git
 
 from lobbies import Lobby, BELL_EMOJI, NOBELL_EMOJI
 from replays import ReplayData, replays_load_emojis, replay_id_to_url
@@ -24,28 +22,12 @@ ROOT_DIR = os.path.dirname(os.path.realpath(__file__))
 LOGS_DIR = os.path.join(ROOT_DIR, "logs")
 LOG_FILE_TIMESTAMP_FORMAT = "%Y%m%d_%H%M%S"
 
-#PARAMS AND CONSTANTS LOAD
-#PARAMS
-BOT_ID = params.BOT_ID
-BOT_TOKEN = params.BOT_TOKEN
-REBOOT_ON_UPDATE = params.REBOOT_ON_UPDATE
+# PARAMS (PRIVATE)
+from params import BOT_ID, BOT_TOKEN, REBOOT_ON_UPDATE
 
-#CONSTANTS
-try:
-    import constants
-    GUILD_NAME = constants.GUILD_NAME
-    COM_GUILD_ID = constants.COM_GUILD_ID
-    COM_CHANNEL_ID = constants.COM_CHANNEL_ID
-    PUB_HOST_ID = constants.PUB_HOST_ID
-    PEON_ID = constants.PEON_ID
-    SHAMAN_ID = constants.SHAMAN_ID  
-except Exception:
-    GUILD_NAME = params.GUILD_NAME
-    COM_GUILD_ID = params.COM_GUILD_ID
-    COM_CHANNEL_ID = params.COM_CHANNEL_ID
-    PUB_HOST_ID = 791279611311947796
-    PEON_ID = params.PEON_ID
-    SHAMAN_ID = params.SHAMAN_ID
+# CONSTANTS (PUBLIC)
+from constants import GUILD_NAME, BNET_CHANNEL_NAME, ENT_CHANNEL_NAME, COM_GUILD_ID, COM_CHANNEL_ID, PUB_HOST_ID, PEON_ID, SHAMAN_ID, COMMAND_CHARACTER
+
 
 def get_source_version():
     repo = git.Repo(ROOT_DIR)
@@ -62,6 +44,7 @@ def get_source_version():
         raise Exception("HEAD commit sha not found: {}".format(repo.head.commit.hexsha))
     return total - index
 
+
 @unique
 class MessageType(Enum):
     CONNECT = "connect"
@@ -73,10 +56,12 @@ class MessageType(Enum):
     SEND_WORKSPACE = "sendws"
     SEND_WORKSPACE_ACK = "sendwsack"
 
+
 class Message:
     def __init__(self, timestamp, message):
         self.timestamp = timestamp
         self.message = message
+
 
 class MessageHub:
     MAX_AGE_SECONDS = 5 * 60
@@ -122,6 +107,17 @@ class MessageHub:
                         return True
             return False
 
+
+def create_client():
+    client_intents = discord.Intents.default()
+    client_intents.message_content = True
+    client_intents.members = True
+    client_intents.reactions = True
+    client = commands.Bot(command_prefix=COMMAND_CHARACTER, intents=client_intents)
+    client.remove_command("help")
+    return client
+
+
 # constants
 DB_FILE_PATH = os.path.join(ROOT_DIR, "IBCE_WARN.db")
 DB_ARCHIVE_PATH = os.path.join(ROOT_DIR, "archive", "IBCE_WARN.db")
@@ -130,12 +126,7 @@ VERSION = get_source_version()
 print("Source version {}".format(VERSION))
 
 # discord connection
-client_intents = discord.Intents().default()
-client_intents.members = True
-client_intents.reactions = True
-_client = discord.ext.commands.Bot(command_prefix="!", intents=client_intents)
-_client.remove_command("help")
-
+_client = create_client()
 _guild = None
 _bnet_channel = None
 _ent_channel = None
@@ -156,6 +147,7 @@ _open_lobbies = []
 _ent_down_tries = 0
 _wc3stats_down_tries = 0
 
+
 class TimedCallback:
     def __init__(self, t, func, *args, **kwargs):
         self._timeout = t
@@ -168,6 +160,7 @@ class TimedCallback:
 
     def cancel(self):
         self._task.cancel()
+
 
 async def com(to_id, message_type, message = "", file = None):
     assert isinstance(to_id, int)
@@ -184,6 +177,7 @@ async def com(to_id, message_type, message = "", file = None):
         await _com_channel.send(payload)
     else:
         await _com_channel.send(payload, file=file)
+
 
 def archive_db():
     archive_dir = os.path.dirname(DB_ARCHIVE_PATH)
@@ -482,11 +476,13 @@ async def ensure_display(func, *args, window=2, return_name=None, **kwargs):
         if not _message_hub.got_message(MessageType.ENSURE_DISPLAY, window, return_name):
             _callbacks.append(TimedCallback(window, ensure_display_backup, func, *args, window=window, return_name=return_name, **kwargs))
 
+
 @_client.command()
 async def ping(ctx):
     if isinstance(ctx.channel, discord.channel.DMChannel):
         logging.info("pingpong")
         await ensure_display(ctx.channel.send, "pong")
+
 
 @_client.command()
 async def update(ctx, bot_id):  # TODO default bot_id=None ??
@@ -509,6 +505,7 @@ async def update(ctx, bot_id):  # TODO default bot_id=None ??
             if max(_alive_instances) == BOT_ID:
                 await self_promote()
 
+
 @_client.event
 async def on_ready():
     global _guild
@@ -524,9 +521,6 @@ async def on_ready():
     global _EU_role
     global _NA_role
     global _KR_role
-
-    BNET_CHANNEL_NAME = "pub-games"
-    ENT_CHANNEL_NAME = "general-chat"
 
     guild_ib = None
     guild_com = None
@@ -579,6 +573,9 @@ async def on_ready():
     await com(-1, MessageType.CONNECT, str(VERSION))
     _callbacks.append(TimedCallback(3, self_promote))
 
+    refresh_ib_lobbies.start()
+
+
 @_client.event
 async def on_message(message):
     if message.author.id == _client.user.id and message.channel == _com_channel:
@@ -603,6 +600,7 @@ async def on_message(message):
     else:
         await check_replay(message)
         await _client.process_commands(message)
+
 
 async def remove_reaction(channel_id, message_id, emoji, member):
     channel = _client.get_channel(channel_id)
@@ -637,6 +635,7 @@ _gatherer = None
 _gathered = False
 _gather_time = datetime.datetime.now()
 
+
 async def gather():
     gather_list_string = " ".join([member.mention for member in _okib_members])
     await _okib_channel.send(gather_list_string + " Time to play !")
@@ -649,9 +648,11 @@ async def gather():
             logging.warning("Error sending DM to {}, {}".format(member.name, e))
             traceback.print_exc()
 
+
 async def combinator3000(*args):
     for f in args:
         await f()
+
 
 async def list_update():
     global _list_content
@@ -664,6 +665,7 @@ async def list_update():
         NOIB_EMOJI_STRING, noib_list_string
     )
 
+
 async def check_almost_gather():
     #print(len(_okib_members)+round(0.1+len(_laterib_members)/2))
     if len(_okib_members)+round(0.1+len(_laterib_members)/2) >= OKIB_GATHER_PLAYERS and not _gathered:
@@ -675,6 +677,7 @@ async def check_almost_gather():
                 logging.warning("Error sending DM to {}, {}".format(member.name, e))
                 traceback.print_exc()
 
+
 def gather_check():
     global _gathered
     if len(_okib_members) >= OKIB_GATHER_PLAYERS and not _gathered:
@@ -682,6 +685,7 @@ def gather_check():
     if len(_okib_members) < OKIB_GATHER_PLAYERS and _gathered:
         _gathered = False
         return False
+
 
 async def up(ctx):
     global _okib_message_id
@@ -697,6 +701,7 @@ async def up(ctx):
     await ctx.message.delete()
     _okib_message_id = okib_message.id
     return _okib_message_id
+
 
 @_client.command()
 async def okib(ctx, arg=None):
@@ -794,6 +799,7 @@ async def okib(ctx, arg=None):
                 )
             ))
 
+
 @_client.command()
 async def noib(ctx):
     global _okib_members
@@ -846,6 +852,7 @@ async def noib(ctx):
                 (await _okib_channel.fetch_message(_okib_message_id)).edit,
                 content=_list_content)
         ))
+
 
 async def okib_on_reaction_add(channel_id, message_id, emoji, member):
     global _okib_members
@@ -969,12 +976,14 @@ async def okib_on_reaction_add(channel_id, message_id, emoji, member):
 #                 await grunt_promote(after)
 #                 await shaman_promote(after)
 
+
 def nonquery(query):
     conn = sqlite3.connect(DB_FILE_PATH)
     cursor = conn.cursor()
     cursor.execute(query)
     conn.commit()
     conn.close()
+
 
 @_client.command()
 async def warn(ctx, arg1, *, arg2=""):
@@ -986,6 +995,7 @@ async def warn(ctx, arg1, *, arg2=""):
         sqlquery = "INSERT INTO Events (Event_type,Player_id,Reason,Datetime,Warner) VALUES (666,{},\"{}\",\"{}\",\"{}\")".format(user.id, arg2, datetime.datetime.now(), ctx.message.author.display_name)
         nonquery(sqlquery)
         await ensure_display(ctx.channel.send, "User <@!{}> has been warned !".format(user.id))
+
 
 @_client.command()
 async def pedigree(ctx):
@@ -1006,6 +1016,7 @@ async def pedigree(ctx):
                 await ensure_display(ctx.channel.send, "{} => User <@!{}> has been warned by {} for the following reason:\n{}".format(row[2], row[0], row[3], row[1]))
                 row = cursor.fetchone()
     conn.close()
+
 
 # ==== MISC ========================================================================================
 
@@ -1047,9 +1058,11 @@ async def check_replay(message):
         embed = replay_data.to_discord_embed()
         await ensure_display(message.channel.send, content=content, embed=embed, window=ENSURE_DISPLAY_WINDOW)
 
+
 @_client.command()
 async def unsub(ctx, arg1=None):
     await ensure_display(functools.partial(unsub2, ctx, arg1))
+
 
 async def unsub2(ctx,arg1):
     if (arg1 == "EU" or arg1 == "eu"):
@@ -1062,9 +1075,11 @@ async def unsub2(ctx,arg1):
         await ctx.message.author.remove_roles(_KR_role)
         await ctx.message.channel.send("KR has been succesfully removed from your roles")
 
+
 @_client.command()
 async def sub(ctx, arg1=None):
     await ensure_display(functools.partial(sub2, ctx, arg1))
+
 
 async def sub2(ctx, arg1):
     if (arg1 == "EU" or arg1 == "eu"):
@@ -1076,6 +1091,7 @@ async def sub2(ctx, arg1):
     if (arg1 == "KR" or arg1 == "kr"):
         await ctx.message.author.add_roles(_KR_role)
         await ctx.message.channel.send("KR has been succesfully added in your roles")
+
 
 @_client.command()
 async def update_constants(ctx):
@@ -1094,6 +1110,7 @@ async def update_constants(ctx):
             await ctx.message.channel.send("file updated, now rebooting")
             reboot()
 
+
 @_client.command()
 async def get_constants(ctx):
     if ctx.message.author.roles[-1] < _guild.get_role(SHAMAN_ID):
@@ -1102,6 +1119,7 @@ async def get_constants(ctx):
         f = open(CONSTANTS_PATH, "rb")
         await ctx.message.channel.send("Here you are", file=discord.File(f.name))
         f.close()
+
 
 @_client.command()
 async def get_logs(ctx, arg=None):
@@ -1159,40 +1177,6 @@ async def get_logs(ctx, arg=None):
     logging.info("responding with log file {}".format(full_path))
     with open(full_path) as f:
         await ctx.message.channel.send("Here you are", file=discord.File(f.name))
-
-# @_client.command()
-# async def register(ctx,arg1):
-#     if ctx.message.author.roles[-1] < _guild.get_role(params.GRUNT_ID):
-#         await ensure_display(ctx.channel.send, NO_POWER_MSG)
-#         return
-#     
-#     conn = sqlite3.connect(DB_FILE_PATH)
-#     cursor = conn.cursor()
-# 
-#     #check if name is already registered
-#     sqlquery = "SELECT * FROM Players WHERE ent_name = " + name
-#     cursor.execute(sqlquery)
-#     row = cursor.fetchone()
-#     if row is not None:
-#         conn.close()
-#         await ensure_display(ctx.channel.send, "That ENT name has already been registered, no modification were made")
-#         return
-#     
-#     #check if that player has already registered an ENT name, if so => modify the entry
-#     sqlquery = "SELECT RowID FROM Players WHERE Player_id = " + ctx.message.author.id
-#     cursor.execute(sqlquery)
-#     row = cursor.fetchone()
-#     if row is not None:
-#         #delete the value first
-#         RowID = row[0]
-#         sqlquery = "DELETE FROM Players WHERE RowID = " + str(RowID)
-#         cursor.execute(sqlquery)
-#         conn.commit()
-#     sqlquery = "INSERT INTO Players (Player_id,ent_name) VALUES (" + str(ctx.message.author.id) + "," + name + ")"
-#     cursor.execute(sqlquery)
-#     conn.commit()
-#     conn.close()
-
 
 # ==== LOBBIES =====================================================================================
 
@@ -1424,7 +1408,7 @@ async def getgames(ctx):
         _open_lobbies = [lobby for lobby in _open_lobbies if lobby.is_ent != is_ent_channel]
         await update_ib_lobbies()
 
-@loop(seconds=LOBBY_REFRESH_RATE)
+@tasks.loop(seconds=LOBBY_REFRESH_RATE)
 async def refresh_ib_lobbies():
     if not _initialized:
         return
@@ -1466,6 +1450,7 @@ async def on_raw_reaction_add(payload):
     await okib_on_reaction_add(payload.channel_id, payload.message_id, payload.emoji, payload.member)
     await lobbies_on_reaction_add(payload.channel_id, payload.message_id, payload.emoji, payload.member)
 
+
 if __name__ == "__main__":
     if not os.path.exists(LOGS_DIR):
         os.makedirs(LOGS_DIR)
@@ -1480,5 +1465,4 @@ if __name__ == "__main__":
     )
     logging.getLogger().addHandler(logging.StreamHandler(sys.stdout))
 
-    refresh_ib_lobbies.start()
     _client.run(BOT_TOKEN)
