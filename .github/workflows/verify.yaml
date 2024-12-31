@@ -23,5 +23,5 @@ jobs:
       - name: mypy
         run: python3.11 -m mypy --strict .
 
-      - name: test
+      - name: pytest
         run: python3.11 -m pytest
