@@ -383,6 +383,9 @@ def update_workspace(workspace_bytes: bytes) -> bool:
     global _gathered
     global _gather_time
 
+    if _guild is None:
+        return False
+
     workspace_obj = pickle.loads(workspace_bytes)
     logging.info("Updating workspace: {}".format(workspace_obj))
 
