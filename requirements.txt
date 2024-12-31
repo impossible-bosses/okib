@@ -3,3 +3,4 @@ discord.py
 gitpython
 pytest
 requests
+types-requests
