@@ -157,6 +157,19 @@ class ComState:
         self.message_hub = MessageHub()
         self.is_master_timeout = False
 
+    async def connect(self, client: commands.Bot, com_channel_id: int) -> None:
+        logging.info("Connecting to bot network...")
+
+        com_channel = client.get_channel(com_channel_id)
+        if com_channel is None:
+            raise Exception("COM channel not found")
+        if not isinstance(com_channel, discord.TextChannel):
+            raise Exception("COM channel is not a text channel")
+
+        self.com_channel = com_channel
+        await self.com(-1, MessageType.CONNECT, str(VERSION))
+        self.callbacks.append(TimedCallback(3, self.self_promote, self))
+
     async def com(self, to_id: int, message_type: MessageType, message: str = "", file: discord.File | None = None) -> None:
         assert self.com_channel is not None
         payload = "/".join([
@@ -170,7 +183,7 @@ class ComState:
         else:
             await self.com_channel.send(payload, file=file)
 
-    async def parse_bot_com(self, from_id: int, message_type: MessageType, message: str, attachment: discord.Attachment) -> None:
+    async def parse_bot_com(self, from_id: int, message_type: MessageType, message: str, attachment: discord.Attachment | None) -> None:
         if message_type == MessageType.CONNECT:
             if self.im_master:
                 await self.com(from_id, MessageType.CONNECT_ACK, str(VERSION) + "+")
@@ -222,12 +235,14 @@ class ComState:
                 self.master_instance = from_id
                 logging.info("Master is now {}".format(from_id))
         elif message_type == MessageType.SEND_DB:
+            assert attachment is not None
             db_bytes = await attachment.read()
             await update_db(db_bytes)
             await self.com(from_id, MessageType.SEND_DB_ACK)
         elif message_type == MessageType.SEND_DB_ACK:
             pass
         elif message_type == MessageType.SEND_WORKSPACE:
+            assert attachment is not None
             workspace_bytes = await attachment.read()
             if not update_workspace(workspace_bytes):
                 pass # TODO eh, whatever...
@@ -274,11 +289,6 @@ class ComState:
         else:
             await self.ensure_display(func, *args, window=window, return_name=return_name, **kwargs)
 
-    async def connect(self, channel: discord.TextChannel) -> None:
-        self.com_channel = channel
-        await self.com(-1, MessageType.CONNECT, str(VERSION))
-        self.callbacks.append(TimedCallback(3, self.self_promote, self))
-
     async def ensure_display(self, func: Callable[..., Any], *args: Any, window: int = 2, return_name: str | None = None, **kwargs: Any) -> None:
         if self.im_master:
             result = await func(*args, **kwargs)
@@ -316,19 +326,73 @@ print("Source version {}".format(VERSION))
 
 # discord connection
 _client = create_client()
-_guild: discord.Guild | None = None
-_bnet_channel: discord.TextChannel | None = None
-_ent_channel: discord.TextChannel | None = None
+
+# All discord objects that can be initialized when the client connects, during on_ready.
+class DiscordObjects:
+    guild: discord.Guild
+    channel_bnet: discord.TextChannel
+    channel_ent: discord.TextChannel
+    emote_okib: discord.Emoji
+    emote_laterib: discord.Emoji
+    emote_noib: discord.Emoji
+    role_shaman: discord.Role
+    role_ent_ready: discord.Role
+    role_pub_host: discord.Role
+    role_eu: discord.Role
+    role_kr: discord.Role
+    role_na: discord.Role
+
+    def __init__(self, client: commands.Bot) -> None:
+        guild_ib = None
+        for guild in client.guilds:
+            if guild.name == GUILD_NAME:
+                guild_ib = guild
+        if guild_ib is None:
+            raise Exception("IB guild not found: \"{}\"".format(GUILD_NAME))
+
+        channel_bnet = None
+        channel_ent = None
+        for channel in guild_ib.text_channels:
+            if channel.name == BNET_CHANNEL_NAME:
+                channel_bnet = channel
+            if channel.name == ENT_CHANNEL_NAME:
+                channel_ent = channel
+        if channel_bnet is None:
+            raise Exception("Pub channel not found: \"{}\" in guild \"{}\"".format(BNET_CHANNEL_NAME, guild_ib.name))
+        if channel_ent is None:
+            raise Exception("ENT channel not found: \"{}\" in guild \"{}\"".format(ENT_CHANNEL_NAME, guild_ib.name))
+
+        emote_okib = client.get_emoji(OKIB_EMOJI_ID)
+        emote_laterib = client.get_emoji(LATERIB_EMOJI_ID)
+        emote_noib = client.get_emoji(NOIB_EMOJI_ID)
+        if emote_okib is None or emote_laterib is None or emote_noib is None:
+            raise Exception("One of the required emotes is missing")
+
+        role_shaman = guild_ib.get_role(SHAMAN_ID)
+        role_ent_ready = guild_ib.get_role(PEON_ID)
+        role_pub_host = guild_ib.get_role(PUB_HOST_ID)
+        role_eu = guild_ib.get_role(766268372252884994)
+        role_kr = guild_ib.get_role(800299277842382858)
+        role_na = guild_ib.get_role(773269638116802661)
+        if role_shaman is None or role_ent_ready is None or role_pub_host is None or role_eu is None or role_kr is None or role_na is None:
+            raise Exception("One of the required roles is missing")
+
+        self.guild = guild_ib
+        self.channel_bnet = channel_bnet
+        self.channel_ent = channel_ent
+        self.emote_okib = emote_okib
+        self.emote_laterib = emote_laterib
+        self.emote_noib = emote_noib
+        self.role_shaman = role_shaman
+        self.role_ent_ready = role_ent_ready
+        self.role_pub_host = role_pub_host
+        self.role_eu = role_eu
+        self.role_kr = role_kr
+        self.role_na = role_na
 
 _com_state = ComState()
-# _initialized = False
-# _com_channel = None
-# _im_master = False
-# _alive_instances = set()
-# _master_instance = None
-# _callbacks = []
-# _message_hub = MessageHub()
-# _is_master_timeout = True
+
+_discord_objects: DiscordObjects | None = None
 
 # globals / workspace
 _open_lobbies = []
@@ -383,7 +447,7 @@ def update_workspace(workspace_bytes: bytes) -> bool:
     global _gathered
     global _gather_time
 
-    if _guild is None:
+    if _discord_objects is None:
         return False
 
     workspace_obj = pickle.loads(workspace_bytes)
@@ -397,30 +461,38 @@ def update_workspace(workspace_bytes: bytes) -> bool:
     # OKIB
     channel_id = workspace_obj["okib_channel_id"]
     if channel_id != None:
-        _okib_channel = _client.get_channel(channel_id)
-        if _okib_channel == None:
+        okib_channel = _client.get_channel(channel_id)
+        if not isinstance(okib_channel, discord.TextChannel):
             logging.error("Failed to get OKIB channel from id {}".format(channel_id))
             return False
+        _okib_channel = okib_channel
 
     _okib_message_id = workspace_obj["okib_message_id"]
     _list_content = workspace_obj["list_content"]
 
-    _okib_members = [_guild.get_member(mid) for mid in workspace_obj["okib_member_ids"]]
-    if None in _okib_members:
-        logging.error("Failed to get an OKIB member from ID, {} from {}".format(_okib_members, workspace_obj["okib_member_ids"]))
+    guild = _discord_objects.guild
+    okib_members_null = [guild.get_member(mid) for mid in workspace_obj["okib_member_ids"]]
+    if None in okib_members_null:
+        logging.error("Failed to get an OKIB member from ID, {} from {}".format(okib_members_null, workspace_obj["okib_member_ids"]))
         return False
-    _laterib_members = [_guild.get_member(mid) for mid in workspace_obj["laterib_member_ids"]]
-    if None in _laterib_members:
-        logging.error("Failed to get a laterIB member from ID, {} from {}".format(_laterib_members, workspace_obj["laterib_member_ids"]))
+
+    laterib_members_null = [guild.get_member(mid) for mid in workspace_obj["laterib_member_ids"]]
+    if None in laterib_members_null:
+        logging.error("Failed to get a laterIB member from ID, {} from {}".format(laterib_members_null, workspace_obj["laterib_member_ids"]))
         return False
-    _noib_members = [_guild.get_member(mid) for mid in workspace_obj["noib_member_ids"]]
-    if None in _noib_members:
-        logging.error("Failed to get a member from ID, {} from {}".format(_noib_members, workspace_obj["noib_member_ids"]))
+
+    noib_members_null = [guild.get_member(mid) for mid in workspace_obj["noib_member_ids"]]
+    if None in noib_members_null:
+        logging.error("Failed to get a member from ID, {} from {}".format(noib_members_null, workspace_obj["noib_member_ids"]))
         return False
+
+    _okib_members = cast(list[discord.Member], okib_members_null)
+    _laterib_members = cast(list[discord.Member], laterib_members_null)
+    _noib_members = cast(list[discord.Member], noib_members_null)
 
     gatherer_id = workspace_obj["gatherer_id"]
     if gatherer_id != None:
-        _gatherer = _guild.get_member(gatherer_id)
+        _gatherer = guild.get_member(gatherer_id)
         if _gatherer == None:
             logging.error("Failed to get member from id {}".format(gatherer_id))
             return False
@@ -442,13 +514,13 @@ async def send_workspace(to_id: int) -> None:
         "lobby_message_ids": lobby_message_ids,
 
         # OKIB
-        "okib_channel_id": None if _okib_channel == None else _okib_channel.id,
+        "okib_channel_id": None if _okib_channel is None else _okib_channel.id,
         "okib_message_id": _okib_message_id,
         "list_content": _list_content,
         "okib_member_ids": [m.id for m in _okib_members],
         "laterib_member_ids": [m.id for m in _laterib_members],
         "noib_member_ids": [m.id for m in _noib_members],
-        "gatherer_id": None if _gatherer == None else _gatherer.id,
+        "gatherer_id": None if _gatherer is None else _gatherer.id,
         "gathered": _gathered,
         "gather_time": _gather_time
     }
@@ -479,11 +551,11 @@ def reboot() -> None:
         exit()
 
 # Wrapper around channel.send that only returns the int message ID
-async def send_message(channel: discord.TextChannel, *args, **kwargs) -> int:
+async def send_message(channel: discord.TextChannel, *args: Any, **kwargs: Any) -> int:
     message = await channel.send(*args, **kwargs)
     return message.id
 
-async def send_message_with_bell_reactions(channel: discord.TextChannel, *args, **kwargs) -> int:
+async def send_message_with_bell_reactions(channel: discord.TextChannel, *args: Any, **kwargs: Any) -> int:
     message = await channel.send(*args, **kwargs)
     await message.add_reaction(BELL_EMOJI)
     await message.add_reaction(NOBELL_EMOJI)
@@ -520,79 +592,59 @@ async def update(ctx: commands.Context[commands.Bot], bot_id_str: str) -> None: 
                 await _com_state.self_promote()
 
 
+def is_author_role(ctx: commands.Context[commands.Bot], role: discord.Role) -> bool:
+    requester = ctx.message.author
+    if not isinstance(requester, discord.Member):
+        return False
+    return role in requester.roles
+
+
+def is_author_at_least_role(ctx: commands.Context[commands.Bot], role: discord.Role) -> bool:
+    requester = ctx.message.author
+    if not isinstance(requester, discord.Member):
+        return False
+    return requester.roles[-1] >= role
+
+
+def is_author_at_least_shaman(ctx: commands.Context[commands.Bot]) -> bool:
+    assert _discord_objects is not None
+    return is_author_at_least_role(ctx, _discord_objects.role_shaman)
+
+
+def is_author_at_least_pub_host(ctx: commands.Context[commands.Bot]) -> bool:
+    assert _discord_objects is not None
+    return is_author_at_least_role(ctx, _discord_objects.role_pub_host)
+
+
+def is_author_ent_ready(ctx: commands.Context[commands.Bot]) -> bool:
+    assert _discord_objects is not None
+    return is_author_role(ctx, _discord_objects.role_ent_ready)
+
+
 @_client.event
 async def on_ready() -> None:
-    global _guild
-    global _bnet_channel
-    global _ent_channel
-    # global _com_channel
-    # global _initialized
-    # global _alive_instances
-    # global _callbacks
-    global _okib_emote
-    global _laterib_emote
-    global _noib_emote
-    global _EU_role
-    global _NA_role
-    global _KR_role
-
-    guild_ib = None
-    guild_com = None
-    for guild in _client.guilds:
-        if guild.name == GUILD_NAME:
-            guild_ib = guild
-        if guild.id == COM_GUILD_ID:
-            guild_com = guild
-
-    if guild_ib is None:
-        raise Exception("IB guild not found: \"{}\"".format(GUILD_NAME))
-    if guild_com is None:
-        raise Exception("Com virtual guild not found")
-
-    channel_bnet = None
-    channel_ent = None
-    for channel in guild_ib.text_channels:
-        if channel.name == BNET_CHANNEL_NAME:
-            channel_bnet = channel
-        if channel.name == ENT_CHANNEL_NAME:
-            channel_ent = channel
-    if channel_bnet is None:
-        raise Exception("Pub channel not found: \"{}\" in guild \"{}\"".format(BNET_CHANNEL_NAME, guild_ib.name))
-    if channel_ent is None:
-        raise Exception("ENT channel not found: \"{}\" in guild \"{}\"".format(ENT_CHANNEL_NAME, guild_ib.name))
-
-    channel_com = None
-    for channel in guild_com.text_channels:
-        if channel.id == COM_CHANNEL_ID:
-            channel_com = channel
-    if channel_com is None:
-        raise Exception("Com channel not found")
-
-    _guild = guild_ib
-    _bnet_channel = channel_bnet
-    _ent_channel = channel_ent
-    _EU_role = discord.utils.get(_guild.roles, id=766268372252884994)
-    _NA_role = discord.utils.get(_guild.roles, id=773269638116802661)
-    _KR_role = discord.utils.get(_guild.roles, id=800299277842382858)
-    _okib_emote = _client.get_emoji(OKIB_EMOJI_ID)
-    _laterib_emote = _client.get_emoji(LATERIB_EMOJI_ID)
-    _noib_emote = _client.get_emoji(NOIB_EMOJI_ID)
-    replays_load_emojis(_guild.emojis)
-
-    logging.info("Bot \"{}\" connected to Discord on guild \"{}\", pub channel \"{}\"".format(_client.user, guild_ib.name, channel_bnet.name))
-    await _client.change_presence(activity=None)
-    # _com_channel = channel_com
+    global _com_state
+    global _discord_objects
 
     logging.info("Connecting to bot network...")
-    _com_state = ComState(channel_com)
-    _com_state.connect()
+    await _com_state.connect(_client, COM_CHANNEL_ID)
+
+    _discord_objects = DiscordObjects(_client)
+
+    replays_load_emojis(_discord_objects.guild.emojis)
+
+    logging.info("Bot \"{}\" connected to Discord on guild \"{}\", pub channel \"{}\"".format(_client.user, _discord_objects.guild.name, _discord_objects.channel_bnet.name))
+    await _client.change_presence(activity=None)
 
     refresh_ib_lobbies.start()
 
 
 @_client.event
-async def on_message(message: discord.Message):
-    if message.author.id == _client.user.id and message.channel == _com_channel:
+async def on_message(message: discord.Message) -> None:
+    if _com_state is None:
+        return
+
+    if _client.user is not None and message.author.id == _client.user.id and message.channel == _com_state.com_channel:
         # from this bot user
         message_split = message.content.split("/")
         if len(message_split) != 4:
@@ -616,9 +668,15 @@ async def on_message(message: discord.Message):
         await _client.process_commands(message)
 
 
-async def remove_reaction(channel_id, message_id, emoji, member):
+async def remove_reaction(channel_id: int, message_id: int, emoji: discord.Emoji, member: discord.Member) -> None:
     channel = _client.get_channel(channel_id)
+    if not isinstance(channel, discord.TextChannel):
+        return
+
     message = await channel.fetch_message(message_id)
+    if message is None:
+        return
+
     await message.remove_reaction(emoji, member)
 
 
@@ -635,22 +693,52 @@ NOIB_EMOJI_STRING = "<:noib:{}>".format(NOIB_EMOJI_ID)
 OKIB_GATHER_EMOJI_STRING = "<:ib:{}><:ib2:{}>".format(IB_EMOJI_ID, IB2_EMOJI_ID)
 OKIB_GATHER_PLAYERS = 8 # not pointless - sometimes I use this for testing
 
-_okib_emote: discord.Emoji | None = None
-_laterib_emote: discord.Emoji | None = None
-_noib_emote: discord.Emoji | None = None
 
-_okib_channel: discord.TextChannel | None =  None
-_okib_message_id: int | None = None
-_list_content: str = ""
-_okib_members: list[discord.Member] = []
-_laterib_members: list[discord.Member] = []
-_noib_members: list[discord.Member] = []
-_gatherer: discord.Member | None = None
-_gathered: bool = False
-_gather_time: datetime.datetime = datetime.datetime.now()
+@dataclass
+class OkibActiveState:
+    channel: discord.TextChannel
+    message_id: int | None
+    gatherer: discord.Member
+    gather_time: datetime.datetime
+    gathered: bool
 
 
-async def gather():
+class OkibState:
+    # active: bool
+    # channel: discord.TextChannel
+    # message_id: int
+    # gatherer: discord.Member
+    # gather_time: datetime.datetime
+    active_state: OkibActiveState | None
+    okib_members: list[discord.Member]
+    laterib_members: list[discord.Member]
+    noib_members: list[discord.Member]
+    # gathered: bool
+
+    def __init__(self) -> None:
+        self.active_state = None
+        self.clear_members()
+
+    def clear_members(self) -> None:
+        self.okib_members = []
+        self.laterib_members = []
+        self.noib_members = []
+
+
+_okib_state: OkibState = OkibState
+
+# _okib_channel: discord.TextChannel | None =  None
+# _okib_message_id: int | None = None
+# _list_content: str = ""
+# _okib_members: list[discord.Member] = []
+# _laterib_members: list[discord.Member] = []
+# _noib_members: list[discord.Member] = []
+# _gatherer: discord.Member | None = None
+# _gathered: bool = False
+# _gather_time: datetime.datetime = datetime.datetime.now()
+
+
+async def gather() -> None:
     gather_list_string = " ".join([member.mention for member in _okib_members])
     await _okib_channel.send(gather_list_string + " Time to play !")
     await _okib_channel.send(OKIB_EMOJI_STRING)
@@ -663,12 +751,12 @@ async def gather():
             traceback.print_exc()
 
 
-async def combinator3000(*args):
+async def combinator3000(*args: Any) -> None:
     for f in args:
         await f()
 
 
-async def list_update():
+async def list_update() -> None:
     global _list_content
 
     okib_list_string = ", ".join([member.display_name for member in _okib_members])
@@ -680,7 +768,7 @@ async def list_update():
     )
 
 
-async def check_almost_gather():
+async def check_almost_gather() -> None:
     #print(len(_okib_members)+round(0.1+len(_laterib_members)/2))
     if len(_okib_members)+round(0.1+len(_laterib_members)/2) >= OKIB_GATHER_PLAYERS and not _gathered:
         for member in _laterib_members:
@@ -692,13 +780,13 @@ async def check_almost_gather():
                 traceback.print_exc()
 
 
-def gather_check():
+def gather_check() -> bool:
     global _gathered
     if len(_okib_members) >= OKIB_GATHER_PLAYERS and not _gathered:
         return True
     if len(_okib_members) < OKIB_GATHER_PLAYERS and _gathered:
         _gathered = False
-        return False
+    return False
 
 
 async def up(ctx: commands.Context[commands.Bot]) -> None:
@@ -718,74 +806,88 @@ async def up(ctx: commands.Context[commands.Bot]) -> None:
 
 
 @_client.command()
-async def okib(ctx, arg=None):
-    global _okib_channel
-    global _okib_message_id
-    global _okib_members
-    global _laterib_members
-    global _noib_members
-    global _gatherer
-    global _gathered
-    global _gather_time
+async def okib(ctx: commands.Context[commands.Bot], arg: str | None = None) -> None:
+    assert _discord_objects is not None
+    # global _okib_channel
+    # global _okib_message_id
+    # global _okib_members
+    # global _laterib_members
+    # global _noib_members
+    # global _gatherer
+    # global _gathered
+    # global _gather_time
 
-    adv = False
     #PUB OKIB
-    if ctx.channel ==  _bnet_channel:
-        if ctx.message.author.roles[-1] < _guild.get_role(PUB_HOST_ID):
+    if ctx.channel == _discord_objects.channel_bnet:
+        if not is_author_at_least_pub_host(ctx):
             await _com_state.ensure_display(ctx.channel.send, NO_POWER_MSG)
             return
     #/PUB OKIB
-    elif ctx.message.author.roles[-1] < _guild.get_role(PEON_ID):
+    elif not is_author_ent_ready(ctx):
         await _com_state.ensure_display(ctx.channel.send, NO_POWER_MSG)
         return
-    if ctx.message.author.roles[-1] >= _guild.get_role(SHAMAN_ID) or ctx.message.author == _gatherer:
+
+    author = ctx.message.author
+    if not isinstance(author, discord.Member):
+        return
+
+    adv = False
+    if is_author_at_least_shaman(ctx) or _okib_state is not None and author == _okib_state.gatherer:
         adv = True
-    if adv == False and arg != None:
+    if not adv and arg != None:
         await _com_state.ensure_display(ctx.channel.send, NO_POWER_MSG)
         return
 
-    if  _okib_channel is not None and _okib_channel != ctx.channel:
-        await _com_state.ensure_display(ctx.channel.send, "gathering is already in progress in channel " + _okib_channel.mention)
+    if _okib_state is not None and _okib_state.channel != ctx.channel:
+        await _com_state.ensure_display(ctx.channel.send, "gathering is already in progress in channel " + _okib_state.channel.mention)
         return
 
-    modify = False
-    for user in ctx.message.mentions:
-        if user not in _okib_members:
-            _okib_members.append(user)
-            modify = True
-        if user in _noib_members:
-            _noib_members.remove(user)
-            modify = True
-        if user in _laterib_members:
-            _laterib_members.remove(user)
-
-    if _okib_channel is None:
-        _gatherer = ctx.message.author
-        _gather_time = datetime.datetime.now()
+    if _okib_state.active_state is None:
+        _okib_state.active_state = OkibActiveState(ctx.channel, None, author, datetime.datetime.now(), False)
+        # _gatherer = ctx.message.author
+        # _gather_time = datetime.datetime.now()
         # Check for option
         if adv and arg == 'retrieve':
             pass
         else:
-            _gathered = False
-            _okib_members = []
-            _laterib_members = []
-            _noib_members = []
-            for user in ctx.message.mentions:
-                if user not in _okib_members:
-                    _okib_members.append(user)
-                if user in _noib_members:
-                    _noib_members.remove(user)
-                if user in _laterib_members:
-                    _laterib_members.remove(user)
+            _okib_state.clear_members()
+            # _okib_state.okib_members = []
+            # _okib_state.laterib_members = []
+            # _okib_state.noib_members = []
+            # _gathered = False
+            # _okib_members = []
+            # _laterib_members = []
+            # _noib_members = []
+            # for user in ctx.message.mentions:
+            #     if user not in _okib_members:
+            #         _okib_members.append(user)
+            #     if user in _noib_members:
+            #         _noib_members.remove(user)
+            #     if user in _laterib_members:
+            #         _laterib_members.remove(user)
 
-        _okib_channel = ctx.channel
+        # _okib_channel = ctx.channel
         await list_update()
         await _com_state.ensure_display(up, ctx, return_name="_okib_message_id")
         modify = False
-    elif arg == None:
+    elif arg is None:
         await _com_state.ensure_display(up, ctx, return_name="_okib_message_id")
 
-    if arg == 'retrieve':
+    modify = False
+    for user in ctx.message.mentions:
+        if not isinstance(user, discord.Member):
+            continue
+
+        if user not in _okib_state.okib_members:
+            _okib_state.okib_members.append(user)
+            modify = True
+        if user in _okib_state.noib_members:
+            _okib_state.noib_members.remove(user)
+            modify = True
+        if user in _okib_state.laterib_members:
+            _okib_state.laterib_members.remove(user)
+
+    if arg == "retrieve":
         await list_update()
         gather_check()
         if _gathered:
@@ -991,7 +1093,7 @@ async def okib_on_reaction_add(channel_id: int, message_id: int, emoji: discord.
 #                 await shaman_promote(after)
 
 
-def nonquery(query):
+def nonquery(query: str) -> None:
     conn = sqlite3.connect(DB_FILE_PATH)
     cursor = conn.cursor()
     cursor.execute(query)
@@ -1000,8 +1102,8 @@ def nonquery(query):
 
 
 @_client.command()
-async def warn(ctx, arg1, *, arg2=""):
-    if ctx.message.author.roles[-1] < _guild.get_role(SHAMAN_ID):
+async def warn(ctx: commands.Context[commands.Bot], arg1: str | None, *, arg2: str = "") -> None:
+    if not is_author_at_least_shaman(ctx):
         await _com_state.ensure_display(ctx.channel.send, NO_POWER_MSG)
         return
 
@@ -1013,7 +1115,7 @@ async def warn(ctx, arg1, *, arg2=""):
 
 @_client.command()
 async def pedigree(ctx: commands.Context[commands.Bot]) -> None:
-    if ctx.message.author.roles[-1] < _guild.get_role(PEON_ID):
+    if not is_author_at_least_shaman(ctx):
         await _com_state.ensure_display(ctx.channel.send, NO_POWER_MSG)
         return
 
@@ -1034,7 +1136,7 @@ async def pedigree(ctx: commands.Context[commands.Bot]) -> None:
 
 # ==== MISC ========================================================================================
 
-async def check_replay(message):
+async def check_replay(message: discord.Message) -> None:
     ENSURE_DISPLAY_WINDOW = 60
 
     if len(message.attachments) == 0:
@@ -1074,72 +1176,80 @@ async def check_replay(message):
 
 
 @_client.command()
-async def unsub(ctx, arg1=None):
+async def unsub(ctx: commands.Context[commands.Bot], arg1: str | None = None) -> None:
     await _com_state.ensure_display(functools.partial(unsub2, ctx, arg1))
 
 
-async def unsub2(ctx,arg1):
+async def unsub2(ctx: commands.Context[commands.Bot], arg1: str | None) -> None:
+    assert _discord_objects is not None
+    if not isinstance(ctx.message.author, discord.Member):
+        return
+
     if (arg1 == "EU" or arg1 == "eu"):
-        await ctx.message.author.remove_roles(_EU_role)
+        await ctx.message.author.remove_roles(_discord_objects.role_eu)
         await ctx.message.channel.send("EU has been succesfully removed from your roles")
-    if (arg1 == "NA" or arg1 == "na"):
-        await ctx.message.author.remove_roles(_NA_role)
-        await ctx.message.channel.send("NA has been succesfully removed from your roles")
     if (arg1 == "KR" or arg1 == "kr"):
-        await ctx.message.author.remove_roles(_KR_role)
+        await ctx.message.author.remove_roles(_discord_objects.role_kr)
         await ctx.message.channel.send("KR has been succesfully removed from your roles")
+    if (arg1 == "NA" or arg1 == "na"):
+        await ctx.message.author.remove_roles(_discord_objects.role_na)
+        await ctx.message.channel.send("NA has been succesfully removed from your roles")
 
 
 @_client.command()
-async def sub(ctx, arg1=None):
+async def sub(ctx: commands.Context[commands.Bot], arg1: str | None = None) -> None:
     await _com_state.ensure_display(functools.partial(sub2, ctx, arg1))
 
 
-async def sub2(ctx, arg1):
+async def sub2(ctx: commands.Context[commands.Bot], arg1: str | None) -> None:
+    assert _discord_objects is not None
+    if not isinstance(ctx.message.author, discord.Member):
+        return
+
     if (arg1 == "EU" or arg1 == "eu"):
-        await ctx.message.author.add_roles(_EU_role)
+        await ctx.message.author.add_roles(_discord_objects.role_eu)
         await ctx.message.channel.send("EU has been succesfully added in your roles")
-    if (arg1 == "NA" or arg1 == "na"):
-        await ctx.message.author.add_roles(_NA_role)
-        await ctx.message.channel.send("NA has been succesfully added in your roles")
     if (arg1 == "KR" or arg1 == "kr"):
-        await ctx.message.author.add_roles(_KR_role)
+        await ctx.message.author.add_roles(_discord_objects.role_kr)
         await ctx.message.channel.send("KR has been succesfully added in your roles")
+    if (arg1 == "NA" or arg1 == "na"):
+        await ctx.message.author.add_roles(_discord_objects.role_na)
+        await ctx.message.channel.send("NA has been succesfully added in your roles")
 
 
 @_client.command()
 async def update_constants(ctx: commands.Context[commands.Bot]) -> None:
-    if ctx.message.author.roles[-1] < _guild.get_role(SHAMAN_ID):
+    if not is_author_at_least_shaman(ctx):
         return
-    else:
-        if len(ctx.message.attachments) > 0:
-            try:
-                B = await ctx.message.attachments[0].read()
-            except Exception:
-                logging.error(sys.exc_info())
-                await ctx.message.channel.send("Failed to update constants - logged error trace")
-                return
 
-            f = open(CONSTANTS_PATH, "wb")
-            f.write(B)
-            f.close()
-            await ctx.message.channel.send("file updated, now rebooting")
-            reboot()
+    if len(ctx.message.attachments) > 0:
+        try:
+            B = await ctx.message.attachments[0].read()
+        except Exception:
+            logging.error(sys.exc_info())
+            await ctx.message.channel.send("Failed to update constants - logged error trace")
+            return
+
+        f = open(CONSTANTS_PATH, "wb")
+        f.write(B)
+        f.close()
+        await ctx.message.channel.send("file updated, now rebooting")
+        reboot()
 
 
 @_client.command()
 async def get_constants(ctx: commands.Context[commands.Bot]) -> None:
-    if ctx.message.author.roles[-1] < _guild.get_role(SHAMAN_ID):
+    if not is_author_at_least_shaman(ctx):
         return
-    else:
-        f = open(CONSTANTS_PATH, "rb")
-        await ctx.message.channel.send("Here you are", file=discord.File(f.name))
-        f.close()
+
+    f = open(CONSTANTS_PATH, "rb")
+    await ctx.message.channel.send("Here you are", file=discord.File(f.name))
+    f.close()
 
 
 @_client.command()
 async def get_logs(ctx: commands.Context[commands.Bot], arg: str | None = None) -> None:
-    if ctx.message.author.roles[-1] < _guild.get_role(SHAMAN_ID):
+    if not is_author_at_least_shaman(ctx):
         return
 
     logging.info("get_logs arg={}".format(arg))
@@ -1213,8 +1323,9 @@ def lobby_get_message_id(lobby: Lobby) -> int | None:
     return value
 
 async def lobby_create_message(lobby: Lobby) -> None:
-    channel = _ent_channel if lobby.is_ent else _bnet_channel
+    assert _discord_objects is not None
 
+    channel = _discord_objects.channel_ent if lobby.is_ent else _discord_objects.channel_bnet
     try:
         message_info = lobby.to_discord_message_info()
         if message_info is None:
@@ -1232,8 +1343,9 @@ async def lobby_create_message(lobby: Lobby) -> None:
         traceback.print_exc()
 
 async def lobby_update_message(lobby: Lobby, is_open: bool = True) -> None:
-    channel = _ent_channel if lobby.is_ent else _bnet_channel
+    assert _discord_objects is not None
 
+    channel = _discord_objects.channel_ent if lobby.is_ent else _discord_objects.channel_bnet
     message_id = lobby_get_message_id(lobby)
     if message_id is not None:
         message = None
@@ -1272,9 +1384,11 @@ async def lobby_update_message(lobby: Lobby, is_open: bool = True) -> None:
         if key in globals():
             del globals()[key]
 
-async def lobby_delete_message(lobby: Lobby) -> None:
-    channel = _ent_channel if lobby.is_ent else _bnet_channel
 
+async def lobby_delete_message(lobby: Lobby) -> None:
+    assert _discord_objects is not None
+
+    channel = _discord_objects.channel_ent if lobby.is_ent else _discord_objects.channel_bnet
     message_id = lobby_get_message_id(lobby)
     if message_id is not None:
         message = None
@@ -1292,6 +1406,7 @@ async def lobby_delete_message(lobby: Lobby) -> None:
     key = lobby.get_message_id_key()
     if key in globals():
         del globals()[key]
+
 
 def get_lobby_changes(prev_lobbies: list[Lobby], api_lobbies: list[Lobby]) -> tuple[list[Lobby], list[bool], list[bool], list[bool]]:
     lobbies = []
@@ -1314,6 +1429,7 @@ def get_lobby_changes(prev_lobbies: list[Lobby], api_lobbies: list[Lobby]) -> tu
 
     return (lobbies, is_prev_lobby_closed, is_lobby_new, is_lobby_updated)
 
+
 async def report_lobbies(prev_lobbies: list[Lobby], api_lobbies: list[Lobby]) -> list[Lobby]:
     changes = get_lobby_changes(prev_lobbies, api_lobbies)
     lobbies = changes[0]
@@ -1333,6 +1449,7 @@ async def report_lobbies(prev_lobbies: list[Lobby], api_lobbies: list[Lobby]) ->
 
     return lobbies
 
+
 async def update_bnet_lobbies(session: aiohttp.ClientSession, prev_lobbies: list[Lobby]) -> list[Lobby]:
     response = await session.get("https://api.wc3stats.com/gamelist")
     response_json = await response.json()
@@ -1347,6 +1464,7 @@ async def update_bnet_lobbies(session: aiohttp.ClientSession, prev_lobbies: list
     logging.debug("wc3stats: {}/{} IB lobbies".format(len(ib_lobbies), len(lobbies)))
     return await report_lobbies(prev_lobbies, ib_lobbies)
 
+
 async def update_ent_lobbies(session: aiohttp.ClientSession, prev_lobbies: list[Lobby]) -> list[Lobby]:
     response = await session.get("https://host.entgaming.net/allgames")
     response_json = await response.json()
@@ -1357,6 +1475,7 @@ async def update_ent_lobbies(session: aiohttp.ClientSession, prev_lobbies: list[
     ib_lobbies = [lobby for lobby in lobbies if lobby.is_ib()]
     logging.debug("ENT: {}/{} IB lobbies".format(len(ib_lobbies), len(lobbies)))
     return await report_lobbies(prev_lobbies, ib_lobbies)
+
 
 async def update_ib_lobbies() -> None:
     global _open_lobbies
@@ -1407,13 +1526,15 @@ async def update_ib_lobbies() -> None:
 
     _open_lobbies = new_bnet_lobbies + new_ent_lobbies
 
+
 @_client.command()
 async def getgames(ctx: commands.Context[commands.Bot]) -> None:
     global _open_lobbies
+    assert _discord_objects is not None
 
-    if ctx.channel == _ent_channel:
+    if ctx.channel == _discord_objects.channel_ent:
         is_ent_channel = True
-    elif ctx.channel == _bnet_channel:
+    elif ctx.channel == _discord_objects.channel_bnet:
         is_ent_channel = False
     else:
         return
@@ -1428,6 +1549,7 @@ async def getgames(ctx: commands.Context[commands.Bot]) -> None:
         _open_lobbies = [lobby for lobby in _open_lobbies if lobby.is_ent != is_ent_channel]
         await update_ib_lobbies()
 
+
 @tasks.loop(seconds=LOBBY_REFRESH_RATE)
 async def refresh_ib_lobbies() -> None:
     if not _com_state.initialized:
@@ -1436,6 +1558,7 @@ async def refresh_ib_lobbies() -> None:
     logging.debug("Refreshing lobby list")
     async with _update_lobbies_lock:
         await update_ib_lobbies()
+
 
 async def lobbies_on_reaction_add(channel_id: int, message_id: int, emoji: discord.PartialEmoji, member: discord.Member) -> None:
     if member.bot or not emoji.is_unicode_emoji() or (emoji.name != BELL_EMOJI and emoji.name != NOBELL_EMOJI):
@@ -1463,7 +1586,9 @@ async def lobbies_on_reaction_add(channel_id: int, message_id: int, emoji: disco
     if match_lobby:
         await _com_state.ensure_display(remove_reaction, channel_id, message_id, emoji, member)
 
+
 # ==== MAIN ========================================================================================
+
 
 @_client.tree.command(
     name="testing",
@@ -1476,6 +1601,7 @@ async def testing_command(interaction: discord.Interaction[commands.Bot]) -> Non
     await asyncio.sleep(5)
     await interaction.delete_original_response()
 
+
 @_client.command()
 async def sync_commands(ctx: commands.Context[commands.Bot]) -> None:
     global _client
@@ -1486,6 +1612,7 @@ async def sync_commands(ctx: commands.Context[commands.Bot]) -> None:
     await _client.tree.sync(guild=discord.Object(id=779233666336948235))  # sync slash commands
     logging.info("Synced slash commands.")
     await ctx.message.channel.send("Synced commands.")
+
 
 @_client.event
 async def on_raw_reaction_add(payload: discord.RawReactionActionEvent) -> None:

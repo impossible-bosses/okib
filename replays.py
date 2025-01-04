@@ -214,7 +214,7 @@ class ReplayData:
         embed.set_footer(text=self.map)
         return embed
 
-def replays_load_emojis(guild_emojis: list[discord.Emoji]) -> None:
+def replays_load_emojis(guild_emojis: tuple[discord.Emoji, ...]) -> None:
     global _class_emoji
     _class_emoji = {}
 
