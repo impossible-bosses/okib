@@ -133,14 +133,14 @@ class Lobby:
         return "lobbymsg{}".format(self.id)
 
     def is_ib(self):
-        #return self.map.find("Legion") != -1 and self.map.find("TD") != -1 # test
+        # return self.map.find("Legion") != -1 and self.map.find("TD") != -1 # test
         #return self.map.find("Uther Party") != -1 # test
         return self.map.find("Impossible") != -1 and self.map.find("Bosses") != -1
 
     def is_updated(self, new):
         return self.name != new.name or self.server != new.server or self.map != new.map or self.host != new.host or self.slots_taken != new.slots_taken or self.slots_total != new.slots_total
 
-    def to_discord_message_info(self, is_open=True):
+    def to_discord_message_info(self, bnet_lobby_role, is_open):
         COLOR_CLOSED = discord.Colour(0x8a0808)
 
         version = get_map_version(self.map)
@@ -158,6 +158,8 @@ class Lobby:
         elif version.deprecated:
             mark = ":x:"
             message = ":warning: *Old map version* :warning:"
+        if not self.is_ent:
+            message += f"\n{bnet_lobby_role.mention}"
 
         slots_taken = self.slots_taken
         slots_total = self.slots_total
