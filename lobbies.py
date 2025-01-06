@@ -164,7 +164,9 @@ class Lobby:
             mark = ":x:"
             message = ":warning: *Old map version* :warning:"
         if not self.is_ent:
-            message += f"\n{bnet_lobby_role.mention}"
+            if len(message) > 0:
+                message += "\n"
+            message += f"{bnet_lobby_role.mention}"
 
         slots_taken = self.slots_taken
         slots_total = self.slots_total
