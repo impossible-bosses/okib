@@ -683,17 +683,23 @@ async def gather():
             traceback.print_exc()
     # Step 1: Pick a host
     selected_host = None
+    # Check if the gatherer (initiator) is in the trusted list
+    if _gatherer and _gatherer.id in {info["discord_id"] for info in TRUSTED_HOSTS.values()}:
+        selected_host = _gatherer
 
-    for host_name, host_info in TRUSTED_HOSTS.items():
-        for member in _okib_members:
-            if member.id == host_info["discord_id"]:  # Compare with stored Discord ID
-                selected_host = member
-                break
-        if selected_host:
-            break
-
+     # If the gatherer is not in the trusted list, pick the next best trusted host
     if not selected_host:
-        selected_host = _okib_members[0]  # Fallback to the first player if no trusted hosts found
+        for host_name, host_info in TRUSTED_HOSTS.items():
+            for member in _okib_members:
+                if member.id == host_info["discord_id"]:  # Compare with stored Discord ID
+                    selected_host = member
+                    break
+            if selected_host:
+                break
+
+    # If no trusted host is found, fallback to the first player
+    if not selected_host:
+        selected_host = _okib_members[0] 
 
     # Step 2: Get the ENT Gaming username
     ent_host = None
