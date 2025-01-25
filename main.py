@@ -653,13 +653,12 @@ OKIB_EMOJI_STRING = "<:okib:{}>".format(OKIB_EMOJI_ID)
 NOIB_EMOJI_STRING = "<:noib:{}>".format(NOIB_EMOJI_ID)
 OKIB_GATHER_EMOJI_STRING = "<:ib:{}><:ib2:{}>".format(IB_EMOJI_ID, IB2_EMOJI_ID)
 OKIB_GATHER_PLAYERS = 8 # not pointless - sometimes I use this for testing
-DISCORD_TO_ENT_MAPPING = {
-    "Noway": "Nowayouthere",
-    "DiscordUser2": "EntGamingUser2",
-    "DiscordUser3": "EntGamingUser3",
+TRUSTED_HOSTS = {
+    "Noway": {"discord_id": 426137665558151169, "ent_name": "Nowayouthere"},
+    "Ho_rdor": {"discord_id": 308286388564918275, "ent_name": "Ho_rdor"},
+    "Kiiskifish": {"discord_id": 268445591774822400, "ent_name": "Kiiskifish"},
+    "Sverkerman": {"discord_id": 223069337261572097, "ent_name": "SverkermanEU"},
 }
-TRUSTED_HOSTS = ["Nowayouthere", "DiscordUser3", "DiscordUser1"]  # Prioritized order of host in order of trustworthyness to show up.
-
 _okib_channel =  None
 _okib_message_id = None
 _list_content = ""
@@ -682,11 +681,12 @@ async def gather():
             #Should be an logging.error there but since this might happen quite frequently i dont want it to show as "abnormal"
             logging.warning("Error sending DM to {}, {}".format(member.name, e))
             traceback.print_exc()
-    #Step 1: Pick a host
+    # Step 1: Pick a host
     selected_host = None
-    for trusted in TRUSTED_HOSTS:
+
+    for host_name, host_info in TRUSTED_HOSTS.items():
         for member in _okib_members:
-            if member.display_name == trusted:
+            if member.id == host_info["discord_id"]:  # Compare with stored Discord ID
                 selected_host = member
                 break
         if selected_host:
@@ -696,7 +696,14 @@ async def gather():
         selected_host = _okib_members[0]  # Fallback to the first player if no trusted hosts found
 
     # Step 2: Get the ENT Gaming username
-    ent_host = DISCORD_TO_ENT_MAPPING.get(selected_host.display_name, "defaultHost")
+    ent_host = None
+    for host_name, host_info in TRUSTED_HOSTS.items():
+        if selected_host.id == host_info["discord_id"]:
+            ent_host = host_info["ent_name"]
+            break
+
+    if ent_host is None:
+        ent_host = "defaultHost"  # Fallback if no mapping is found
 
     # Step 3: Start the Playwright hosting script
     print(f"🎮 Starting game host with {ent_host} as host...")
