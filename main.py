@@ -655,9 +655,19 @@ OKIB_GATHER_EMOJI_STRING = "<:ib:{}><:ib2:{}>".format(IB_EMOJI_ID, IB2_EMOJI_ID)
 OKIB_GATHER_PLAYERS = 8 # not pointless - sometimes I use this for testing
 TRUSTED_HOSTS = {
     "Noway": {"discord_id": 426137665558151169, "ent_name": "Nowayouthere"},
-    "Ho_rdor": {"discord_id": 308286388564918275, "ent_name": "Ho_rdor"},
+    "patio111": {"discord_id": 243082672304422913, "ent_name": "patio-111"},
+    "Regit": {"discord_id": 122160531741212672, "ent_name": "Regit"},
     "Kiiskifish": {"discord_id": 268445591774822400, "ent_name": "Kiiskifish"},
+    "Ho_rdor": {"discord_id": 308286388564918275, "ent_name": "Ho_rdor"},
     "Sverkerman": {"discord_id": 223069337261572097, "ent_name": "SverkermanEU"},
+    "hdd": {"discord_id": 270325093979127828, "ent_name": "hdd"},
+    "wirmyom":{"discord_id": 274955094234103818, "ent_name": "wirmyom"},
+    "Sexytime":{"discord_id": 655592896027820053, "ent_name": "chimp123"},
+    "degaf":{"discord_id": 185609154054848512, "ent_name": "degaf"},
+    "typical_methods":{"discord_id": 1062895834422853754, "ent_name": "typical_methods"},
+    "Daumen":{"discord_id":209817147818508300, "ent_name":"Daumen"},
+    "Photon_man24:":{"discord_id":98967257949941760, "ent_name":"Photon_man24"},
+    "Norwood Ranger":{"discord_id": 239817062782861313, "ent_name":"Norwood-Ranger" },
 }
 _okib_channel =  None
 _okib_message_id = None
