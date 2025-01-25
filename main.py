@@ -18,6 +18,7 @@ import git
 
 from lobbies import Lobby, BELL_EMOJI, NOBELL_EMOJI
 from replays import ReplayData, replays_load_emojis, replay_id_to_url
+from enthosting import host_on_ent
 
 ROOT_DIR = os.path.dirname(os.path.realpath(__file__))
 LOGS_DIR = os.path.join(ROOT_DIR, "logs")
@@ -652,6 +653,12 @@ OKIB_EMOJI_STRING = "<:okib:{}>".format(OKIB_EMOJI_ID)
 NOIB_EMOJI_STRING = "<:noib:{}>".format(NOIB_EMOJI_ID)
 OKIB_GATHER_EMOJI_STRING = "<:ib:{}><:ib2:{}>".format(IB_EMOJI_ID, IB2_EMOJI_ID)
 OKIB_GATHER_PLAYERS = 8 # not pointless - sometimes I use this for testing
+DISCORD_TO_ENT_MAPPING = {
+    "Noway": "Nowayouthere",
+    "DiscordUser2": "EntGamingUser2",
+    "DiscordUser3": "EntGamingUser3",
+}
+TRUSTED_HOSTS = ["Nowayouthere", "DiscordUser3", "DiscordUser1"]  # Prioritized order of host in order of trustworthyness to show up.
 
 _okib_channel =  None
 _okib_message_id = None
@@ -675,6 +682,26 @@ async def gather():
             #Should be an logging.error there but since this might happen quite frequently i dont want it to show as "abnormal"
             logging.warning("Error sending DM to {}, {}".format(member.name, e))
             traceback.print_exc()
+    #Step 1: Pick a host
+    selected_host = None
+    for trusted in TRUSTED_HOSTS:
+        for member in _okib_members:
+            if member.display_name == trusted:
+                selected_host = member
+                break
+        if selected_host:
+            break
+
+    if not selected_host:
+        selected_host = _okib_members[0]  # Fallback to the first player if no trusted hosts found
+
+    # Step 2: Get the ENT Gaming username
+    ent_host = DISCORD_TO_ENT_MAPPING.get(selected_host.display_name, "defaultHost")
+
+    # Step 3: Start the Playwright hosting script
+    print(f"🎮 Starting game host with {ent_host} as host...")
+    await host_on_ent(ent_host)
+    
 
 
 async def combinator3000(*args):
